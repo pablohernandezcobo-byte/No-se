@@ -1,0 +1,381 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Mito vs Realidad 01</title>
+<style>html,body{margin:0;background:#000}canvas{display:block}</style>
+</head><body><canvas id="c"></canvas>
+<script>
+// ============================================================
+//  MITO vs REALIDAD #01 — "Los carbohidratos por la noche engordan"
+//  Reel 9:16 · 1080x1920 · 100 BPM (beat = 0.6 s)
+// ============================================================
+const W = 1080, H = 1920, CX = W / 2, DUR = 34.8;
+const RED = [230, 51, 41], DEEP = [178, 18, 27], CREAM = [255, 244, 240], WHITE = [255, 255, 255], PINK = [255, 222, 216];
+const INK = '#151515', GREEN = '#17A964', REDC = 'rgb(230,51,41)', GREY = 'rgba(21,21,21,0.55)';
+
+const cv = document.getElementById('c'); cv.width = W; cv.height = H;
+const out = cv.getContext('2d');
+const mk = (w = W, h = H) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+const buf = mk(), ctx = buf.getContext('2d');
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, k) => a + (b - a) * k;
+const mixc = (a, b, k) => a.map((v, i) => Math.round(lerp(v, b[i], k)));
+const css = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+const eOutExpo = x => x >= 1 ? 1 : 1 - Math.pow(2, -10 * x);
+const eInExpo = x => x <= 0 ? 0 : Math.pow(2, 10 * x - 10);
+const eInOutCubic = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const eOutBack = x => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const F = (s, w = 900, fam = 'Inter Display') => `${w} ${s}px "${fam}"`;
+const MONO = s => `600 ${s}px "DejaVu Sans Mono"`;
+
+function T(str, x, y, size, color, o = {}) {
+  const { weight = 900, fam = 'Inter Display', align = 'center', ls = 0, alpha = 1, font, stroke = 0 } = o;
+  ctx.save(); ctx.font = font || F(size, weight, fam); ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
+  ctx.letterSpacing = ls + 'px'; ctx.globalAlpha *= alpha;
+  const xx = align === 'center' ? x + ls / 2 : x;
+  if (stroke) { ctx.lineWidth = stroke; ctx.strokeStyle = color; ctx.lineJoin = 'round'; ctx.strokeText(str, xx, y); }
+  else { ctx.fillStyle = color; ctx.fillText(str, xx, y); }
+  ctx.restore();
+}
+function mw(str, size, weight = 900, fam = 'Inter Display') { ctx.save(); ctx.font = F(size, weight, fam); ctx.letterSpacing = '0px'; const w = ctx.measureText(str).width; ctx.restore(); return w; }
+const fit = (str, maxW, maxS = 999, weight = 900) => Math.min(maxS, 100 * maxW / mw(str, 100, weight));
+// palabra a palabra, subiendo desde máscara
+function words(str, x, y, size, color, lt, t0, o = {}) {
+  const { stagger = 0.07, dur = 0.55, align = 'center', weight = 900, fam = 'Inter Display' } = o;
+  const parts = str.split(' '), sp = mw(' ', size, weight, fam), ws = parts.map(p => mw(p, size, weight, fam));
+  const total = ws.reduce((a, b) => a + b, 0) + sp * (parts.length - 1);
+  let xx = align === 'center' ? x - total / 2 : x;
+  ctx.save(); ctx.beginPath(); ctx.rect(0, y - size * 0.95, W, size * 1.2); ctx.clip();
+  parts.forEach((p, i) => {
+    const k = eOutExpo(seg(lt, t0 + i * stagger, t0 + i * stagger + dur));
+    if (k > 0) T(p, xx, y + (1 - k) * size * 1.1, size, color, { align: 'left', weight, fam });
+    xx += ws[i] + sp;
+  });
+  ctx.restore();
+  return total;
+}
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function circ(x, y, r) { ctx.beginPath(); ctx.arc(x, y, Math.max(0, r), 0, Math.PI * 2); }
+function card(x, y, w, h, k = 1, r = 36) {
+  ctx.save(); ctx.globalAlpha *= k;
+  ctx.shadowColor = 'rgba(120,20,10,0.16)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 18;
+  ctx.fillStyle = '#fff'; rr(x, y, w, h, r); ctx.fill(); ctx.restore();
+}
+function check(x, y, r, k, col = GREEN) {
+  if (k <= 0) return;
+  ctx.fillStyle = col; circ(x, y, r * eOutBack(Math.min(1, k * 1.6))); ctx.fill();
+  const kk = seg(k, 0.35, 1);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = r * 0.22; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const p = [[x - r * 0.42, y + r * 0.02], [x - r * 0.1, y + r * 0.32], [x + r * 0.45, y - r * 0.3]];
+  ctx.beginPath(); ctx.moveTo(...p[0]);
+  if (kk < 0.4) ctx.lineTo(lerp(p[0][0], p[1][0], kk / 0.4), lerp(p[0][1], p[1][1], kk / 0.4));
+  else { ctx.lineTo(...p[1]); const q = (kk - 0.4) / 0.6; ctx.lineTo(lerp(p[1][0], p[2][0], q), lerp(p[1][1], p[2][1], q)); }
+  ctx.stroke();
+}
+function cross(x, y, r, k) {
+  if (k <= 0) return;
+  ctx.fillStyle = 'rgba(21,21,21,0.25)'; circ(x, y, r * eOutBack(Math.min(1, k * 1.6))); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = r * 0.2; ctx.lineCap = 'round';
+  const a = seg(k, 0.3, 0.65), b = seg(k, 0.65, 1), s = r * 0.36;
+  ctx.beginPath(); ctx.moveTo(x - s, y - s); ctx.lineTo(x - s + 2 * s * a, y - s + 2 * s * a);
+  if (b > 0) { ctx.moveTo(x + s, y - s); ctx.lineTo(x + s - 2 * s * b, y - s + 2 * s * b); }
+  ctx.stroke();
+}
+function moon(x, y, r, col, bgcol) { ctx.fillStyle = col; circ(x, y, r); ctx.fill(); ctx.fillStyle = bgcol; circ(x + r * 0.45, y - r * 0.3, r * 0.85); ctx.fill(); }
+const num = n => Math.round(n).toLocaleString('de-DE'); // 2.200
+
+// ============================================================
+//  ESCENAS (lt = tiempo local)
+// ============================================================
+
+// 1 · GANCHO
+function s1(lt) {
+  const s1 = fit('CARBOHIDRATOS', 960);
+  words('¿CENAR', CX, 480, 170, '#fff', lt, 0.05);
+  words('CARBOHIDRATOS', CX, 480 + 70 + s1, s1, '#fff', lt, 0.2);
+  words('ENGORDA?', CX, 480 + 70 + s1 + 195, 175, '#fff', lt, 0.35);
+  // luna
+  const km = eOutBack(seg(lt, 0.5, 1.0));
+  ctx.save(); ctx.translate(960, 250 + (1 - km) * 60); ctx.globalAlpha = km;
+  moon(0, 0, 48, '#fff', css(RED)); ctx.restore();
+  // bol de arroz
+  const kb = eOutBack(seg(lt, 0.6, 1.1)), bx = CX, by = 1220;
+  ctx.save(); ctx.translate(bx, by); ctx.scale(kb, kb);
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = INK; ctx.lineWidth = 7;
+  ctx.beginPath(); ctx.ellipse(0, 0, 170, 70, 0, Math.PI, 0); ctx.fill(); ctx.stroke(); // arroz
+  const r = rng(4); ctx.fillStyle = INK; for (let i = 0; i < 26; i++) { const a = Math.PI + r() * Math.PI, d = r() * 0.85; ctx.save(); ctx.translate(Math.cos(a) * 160 * d, Math.sin(a) * 62 * d); ctx.rotate(r() * 3); ctx.fillRect(-7, -2.5, 14, 5); ctx.restore(); }
+  ctx.fillStyle = REDC; ctx.beginPath(); ctx.moveTo(-200, 0); ctx.lineTo(200, 0); ctx.bezierCurveTo(190, 140, 110, 170, 0, 170); ctx.bezierCurveTo(-110, 170, -190, 140, -200, 0); ctx.fill();
+  ctx.strokeStyle = INK; ctx.stroke();
+  ctx.fillStyle = INK; ctx.fillRect(-60, 168, 120, 16);
+  // vapor
+  ctx.strokeStyle = 'rgba(21,21,21,0.35)'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+  for (let i = -1; i <= 1; i++) {
+    const ph = (lt * 0.7 + i * 0.33 + 1) % 1; ctx.globalAlpha = Math.sin(ph * Math.PI) * kb;
+    ctx.beginPath(); for (let j = 0; j <= 20; j++) { const yy = -90 - j * 6 - ph * 60, xx = i * 70 + Math.sin(j * 0.5 + lt * 4 + i) * 12; j ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); } ctx.stroke();
+  }
+  ctx.restore();
+  const kt = seg(lt, 1.2, 1.6);
+  T('TE LO EXPLICO EN 30 SEGUNDOS', CX, 1500, 32, INK, { font: MONO(32), alpha: kt, ls: 2 });
+  T('↓', CX, 1580 + Math.sin(lt * 8) * 10, 56, REDC, { alpha: kt });
+}
+
+// 2 · MITO
+function s2(lt) {
+  // sello MITO
+  const k = seg(lt, 0.2, 0.5), s = lerp(2.6, 1, eOutBack(k));
+  if (k > 0) {
+    ctx.save(); ctx.translate(CX, 560); ctx.rotate(-0.09); ctx.scale(s, s); ctx.globalAlpha = Math.min(1, k * 3);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 14; rr(-300, -150, 600, 260, 28); ctx.stroke();
+    ctx.lineWidth = 4; rr(-276, -126, 552, 212, 18); ctx.stroke();
+    T('MITO', 0, 70, 200, '#fff'); ctx.restore();
+  }
+  const lines = ['“LOS CARBOHIDRATOS', 'POR LA NOCHE', 'ENGORDAN”'], sz = fit('“LOS CARBOHIDRATOS', 940, 96);
+  lines.forEach((l, i) => {
+    const y = 960 + i * 125;
+    const w = words(l, CX, y, sz, '#fff', lt, 0.75 + i * 0.22);
+    const ks = eInOutCubic(seg(lt, 2.5 + i * 0.18, 2.85 + i * 0.18));
+    if (ks > 0) { ctx.fillStyle = INK; ctx.fillRect(CX - w / 2 - 20, y - sz * 0.36, (w + 40) * ks, 16); }
+  });
+  T('Uno de los mitos más repetidos del gym', CX, 1400, 40, 'rgba(255,255,255,0.85)', { weight: 600, fam: 'Inter', alpha: seg(lt, 1.6, 2.0) });
+  const kf = eOutBack(seg(lt, 3.3, 3.7));
+  if (kf > 0) { ctx.save(); ctx.translate(CX, 1530); ctx.scale(kf, kf); rr(-170, -50, 340, 84, 42); ctx.fillStyle = INK; ctx.fill(); T('FALSO', 0, 12, 46, '#fff', { ls: 6 }); ctx.restore(); }
+}
+
+// 3 · REALIDAD + balanza
+function s3(lt) {
+  check(150, 300, 44, seg(lt, 0.1, 0.6));
+  words('REALIDAD', 215, 330, 92, INK, lt, 0.1, { align: 'left' });
+  const L = ['LO QUE MANDA ES', 'TU BALANCE CALÓRICO', 'DEL DÍA. NO LA HORA.'];
+  const sz = fit(L[1], 960, 86);
+  L.forEach((l, i) => words(l, 60, 480 + i * sz * 1.08, sz, i === 1 ? REDC : INK, lt, 0.35 + i * 0.15, { align: 'left', stagger: 0.05 }));
+  // balanza
+  const px = CX, py = 900, ka = eOutExpo(seg(lt, 0.6, 1.1));
+  ctx.save(); ctx.globalAlpha = ka;
+  const ang = -0.2 * eOutBack(seg(lt, 1.0, 1.5)) + 0.4 * eOutBack(seg(lt, 2.8, 3.3));
+  ctx.fillStyle = INK; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px - 70, py + 330); ctx.lineTo(px + 70, py + 330); ctx.closePath(); ctx.fill();
+  rr(px - 160, py + 320, 320, 26, 13); ctx.fill();
+  const comes = lt < 2.8 ? lerp(2300, 2600, eOutExpo(seg(lt, 1.0, 1.5))) : lerp(2600, 2000, eOutExpo(seg(lt, 2.8, 3.3)));
+  [[-1, 'COMES', comes, REDC], [1, 'GASTAS', 2300, INK]].forEach(([side, lab, val, col]) => {
+    const ex = px + Math.cos(ang) * 340 * side, ey = py + Math.sin(ang) * 340 * side;
+    ctx.strokeStyle = 'rgba(21,21,21,0.5)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex - 120, ey + 170); ctx.moveTo(ex, ey); ctx.lineTo(ex + 120, ey + 170); ctx.stroke();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(ex, ey + 170, 150, 60, 0, 0, Math.PI); ctx.fill();
+    T(lab, ex, ey + 150, 30, INK, { font: MONO(30), ls: 2 });
+    T(num(val), ex, ey + 300, 56, INK);
+    T('kcal', ex, ey + 336, 26, GREY, { weight: 600, fam: 'Inter' });
+  });
+  ctx.strokeStyle = INK; ctx.lineWidth = 18; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(px - Math.cos(ang) * 340, py - Math.sin(ang) * 340); ctx.lineTo(px + Math.cos(ang) * 340, py + Math.sin(ang) * 340); ctx.stroke();
+  ctx.fillStyle = REDC; circ(px, py, 22); ctx.fill();
+  ctx.restore();
+  // resultado
+  const a1 = seg(lt, 1.4, 1.7) * (1 - seg(lt, 2.6, 2.8)), a2 = seg(lt, 3.2, 3.5);
+  if (a1 > 0) pill('SUPERÁVIT  →  GANAS GRASA', 1470, REDC, a1);
+  if (a2 > 0) pill('DÉFICIT  →  PIERDES GRASA', 1470, GREEN, a2);
+}
+function pill(txt, y, col, k) {
+  ctx.save(); ctx.globalAlpha = k; ctx.translate(CX, y + (1 - k) * 30);
+  const w = mw(txt, 46) + 100; rr(-w / 2, -64, w, 100, 50); ctx.fillStyle = col; ctx.fill();
+  T(txt, 0, 2, 46, '#fff'); ctx.restore();
+}
+
+// 4 · MISMO DÍA, DISTINTA HORA
+function s4(lt) {
+  words('MISMAS CALORÍAS,', 60, 330, 84, INK, lt, 0.05, { align: 'left', stagger: 0.06 });
+  words('DISTINTA HORA', 60, 425, 84, REDC, lt, 0.15, { align: 'left', stagger: 0.06 });
+  dayCard(lt, 520, 'DÍA A', 'Carbohidratos a mediodía', [60, 150, 40], 0.3);
+  dayCard(lt, 920, 'DÍA B', 'Carbohidratos en la cena', [60, 40, 150], 0.55);
+  const ke = eOutBack(seg(lt, 2.3, 2.7));
+  if (ke > 0) {
+    ctx.save(); ctx.translate(CX, 1400); ctx.scale(ke, ke);
+    rr(-330, -60, 660, 104, 52); ctx.fillStyle = INK; ctx.fill();
+    T('= MISMO RESULTADO', 0, 10, 50, '#fff'); ctx.restore();
+  }
+  const kn = seg(lt, 2.8, 3.2);
+  T('Con las mismas calorías y proteína,', CX, 1515, 36, GREY, { weight: 600, fam: 'Inter', alpha: kn });
+  T('la pérdida de grasa es la misma.', CX, 1565, 36, GREY, { weight: 600, fam: 'Inter', alpha: kn });
+}
+function dayCard(lt, y, tag, sub, carbs, t0) {
+  const k = eOutExpo(seg(lt, t0, t0 + 0.5));
+  ctx.save(); ctx.translate((1 - k) * 300, 0);
+  card(60, y, 960, 360, k);
+  ctx.globalAlpha = k;
+  T(tag, 110, y + 75, 28, REDC, { font: MONO(28), align: 'left', ls: 3 });
+  T(sub, 110, y + 128, 44, INK, { weight: 800, align: 'left' });
+  const kc = eOutExpo(seg(lt, t0 + 0.2, t0 + 1.3));
+  T(num(2200 * kc), 970, y + 80, 52, INK, { align: 'right' });
+  T('kcal', 970, y + 115, 26, GREY, { weight: 600, fam: 'Inter', align: 'right' });
+  // línea de tiempo 24 h
+  const x0 = 110, x1 = 970, ay = y + 300, hx = h => x0 + (x1 - x0) * h / 24;
+  ctx.fillStyle = 'rgba(21,21,21,0.12)'; ctx.fillRect(x0, ay, x1 - x0, 4);
+  [8, 14, 21].forEach((h, i) => {
+    const kb = eOutExpo(seg(lt, t0 + 0.35 + i * 0.12, t0 + 0.9 + i * 0.12)), bh = carbs[i] * 0.6 * kb;
+    ctx.fillStyle = carbs[i] > 100 ? REDC : 'rgba(230,51,41,0.35)';
+    rr(hx(h) - 34, ay - bh - 6, 68, bh, 10); ctx.fill();
+    T(carbs[i] + ' g', hx(h), ay - bh - 18, 26, INK, { weight: 800, alpha: kb });
+    T(String(h).padStart(2, '0') + ':00', hx(h), ay + 38, 22, GREY, { font: MONO(22) });
+  });
+  moon(hx(21) + 70, ay - 16, 14, INK, '#fff');
+  ctx.restore();
+}
+
+// 5 · INCLUSO PUEDE AYUDARTE
+function s5(lt) {
+  words('CENAR CARBOS', 60, 330, 92, INK, lt, 0.05, { align: 'left', stagger: 0.06 });
+  words('PUEDE AYUDARTE', 60, 430, 92, REDC, lt, 0.15, { align: 'left', stagger: 0.06 });
+  const rows = [
+    ['MÁS SACIEDAD', 'Menos picoteo y ansiedad nocturna'],
+    ['MEJOR DESCANSO', 'A mucha gente le ayuda a dormir'],
+    ['ENERGÍA PARA ENTRENAR', 'Glucógeno listo para el día siguiente'],
+    ['MÁS ADHERENCIA', 'Una dieta que puedes mantener'],
+  ];
+  rows.forEach(([a, b], i) => {
+    const y = 540 + i * 225, t0 = 0.45 + i * 0.32, k = eOutExpo(seg(lt, t0, t0 + 0.5));
+    ctx.save(); ctx.translate(0, (1 - k) * 80);
+    card(60, y, 960, 190, k, 30);
+    ctx.globalAlpha = k;
+    ctx.fillStyle = REDC; circ(150, y + 95, 48); ctx.fill();
+    T('0' + (i + 1), 150, y + 112, 44, '#fff');
+    T(a, 230, y + 88, 46, INK, { weight: 900, align: 'left' });
+    T(b, 230, y + 138, 32, GREY, { weight: 600, fam: 'Inter', align: 'left' });
+    ctx.restore();
+  });
+}
+
+// 6 · LO QUE SÍ IMPORTA
+function s6(lt) {
+  words('LO QUE SÍ IMPORTA', 60, 330, 84, INK, lt, 0.05, { align: 'left', stagger: 0.06 });
+  words('PARA PERDER GRASA', 60, 425, 84, REDC, lt, 0.15, { align: 'left', stagger: 0.06 });
+  const items = [
+    ['Calorías totales del día', 'Déficit moderado y sostenible'],
+    ['Proteína suficiente', '1,6 – 2,2 g por kg de peso'],
+    ['Entrenamiento de fuerza', 'Para mantener tu músculo'],
+    ['Constancia', 'Semanas, no días sueltos'],
+  ];
+  items.forEach(([a, b], i) => {
+    const y = 560 + i * 170, t0 = 0.5 + i * 0.45, k = seg(lt, t0, t0 + 0.4);
+    check(115, y + 50, 40, seg(lt, t0, t0 + 0.5));
+    ctx.save(); ctx.globalAlpha = k; ctx.translate((1 - eOutExpo(k)) * 60, 0);
+    T(a, 185, y + 50, 48, INK, { weight: 900, align: 'left' });
+    T(b, 185, y + 98, 32, GREY, { weight: 600, fam: 'Inter', align: 'left' });
+    ctx.restore();
+  });
+  const y = 560 + 4 * 170, t0 = 2.4, k = seg(lt, t0, t0 + 0.4);
+  cross(115, y + 50, 40, seg(lt, t0, t0 + 0.5));
+  ctx.save(); ctx.globalAlpha = k * 0.55;
+  T('La hora de los carbohidratos', 185, y + 50, 48, INK, { weight: 900, align: 'left' });
+  const w = mw('La hora de los carbohidratos', 48), ks = eInOutCubic(seg(lt, 2.8, 3.2));
+  ctx.fillStyle = REDC; ctx.globalAlpha = 1; ctx.fillRect(180, y + 32, (w + 10) * ks, 7);
+  ctx.restore();
+}
+
+// 7 · CTA
+function s7(lt) {
+  const L = ['¿QUIERES PERDER', 'GRASA SIN', 'PROHIBIRTE', 'LA CENA?'], sz = fit(L[0], 960, 120);
+  L.forEach((l, i) => words(l, CX, 390 + i * sz * 1.08, sz, '#fff', lt, 0.05 + i * 0.12, { stagger: 0.06 }));
+  const kl = seg(lt, 0.8, 1.1);
+  T('ESCRÍBEME POR DM', CX, 1005, 34, INK, { font: MONO(34), ls: 4, alpha: kl });
+  // burbuja de chat
+  const kb = eOutBack(seg(lt, 1.0, 1.4)), bw = 560, bh = 200, bx = CX - bw / 2, by = 1050;
+  if (kb > 0) {
+    ctx.save(); ctx.translate(CX, by + bh / 2); ctx.scale(kb, kb); ctx.translate(-CX, -(by + bh / 2));
+    ctx.shadowColor = 'rgba(178,18,27,0.35)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 20;
+    ctx.fillStyle = REDC; rr(bx, by, bw, bh, 60); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(bx + bw - 90, by + bh - 10); ctx.lineTo(bx + bw + 10, by + bh + 40); ctx.lineTo(bx + bw - 30, by + bh - 40); ctx.fill();
+    ctx.shadowColor = 'transparent';
+    if (lt < 2.1) {
+      for (let i = 0; i < 3; i++) { const b = Math.sin(lt * 12 - i * 0.9); ctx.fillStyle = `rgba(255,255,255,${0.6 + 0.4 * b})`; circ(CX - 70 + i * 70, by + bh / 2 - Math.max(0, b) * 14, 22); ctx.fill(); }
+    } else {
+      const kw = eOutBack(seg(lt, 2.1, 2.45));
+      ctx.save(); ctx.translate(CX, by + bh / 2); ctx.scale(kw, kw); T('"CENA"', 0, 46, 130, '#fff'); ctx.restore();
+    }
+    ctx.restore();
+    if (lt > 2.4) T('✓✓ Enviado', bx + bw, by + bh + 70, 28, GREY, { weight: 600, fam: 'Inter', align: 'right', alpha: seg(lt, 2.4, 2.7) });
+  }
+  const ks = seg(lt, 2.7, 3.1);
+  T('y te explico cómo trabajo contigo', CX, 1420, 42, INK, { weight: 700, fam: 'Inter', alpha: ks });
+  T('para que pierdas grasa cenando tranquilo.', CX, 1475, 42, INK, { weight: 700, fam: 'Inter', alpha: ks });
+  const kf = seg(lt, 3.4, 3.8);
+  T('SIGUE PARA EL PRÓXIMO MITO →', CX, 1590, 30, REDC, { font: MONO(30), ls: 2, alpha: kf });
+}
+
+// ============================================================
+//  SECUENCIA · FONDO · INTERFAZ DE SERIE
+// ============================================================
+const SC = [
+  { a: 0, b: 3.6, fn: s1, red: 1, full: 0 },
+  { a: 3.6, b: 8.4, fn: s2, red: 1, full: 1 },
+  { a: 8.4, b: 13.8, fn: s3, red: 0, full: 0 },
+  { a: 13.8, b: 19.2, fn: s4, red: 0, full: 0 },
+  { a: 19.2, b: 24.0, fn: s5, red: 0, full: 0 },
+  { a: 24.0, b: 28.8, fn: s6, red: 0, full: 0 },
+  { a: 28.8, b: DUR + 0.01, fn: s7, red: 1, full: 0 },
+];
+const TR = 0.35; // duración del cambio de fondo
+function bgParams(t) {
+  let i = SC.findIndex(s => t >= s.a && t < s.b); if (i < 0) i = SC.length - 1;
+  let red = SC[i].red, full = SC[i].full;
+  if (i > 0) { const k = eInOutCubic(seg(t, SC[i].a - TR * 0.5, SC[i].a + TR * 0.5)); red = lerp(SC[i - 1].red, red, k); full = lerp(SC[i - 1].full, full, k); }
+  return { i, red, full };
+}
+function background(t, red, full) {
+  const top = mixc(mixc(CREAM, RED, red), DEEP, full * 0.6);
+  const bot = mixc(mixc(WHITE, CREAM, 1 - red), RED, full * 0.92);
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, css(top)); g.addColorStop(lerp(0.12, 0.42, red), css(top));
+  g.addColorStop(lerp(0.35, 0.72, red), css(bot)); g.addColorStop(1, css(bot));
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // manchas de luz en movimiento
+  [[0.2, 0.25, 520, 0.7], [0.85, 0.6, 600, 1.1], [0.4, 0.9, 500, 0.5]].forEach(([fx, fy, r, sp], j) => {
+    const x = W * fx + Math.sin(t * sp + j) * 140, y = H * fy + Math.cos(t * sp * 0.8 + j) * 160;
+    const gg = ctx.createRadialGradient(x, y, 0, x, y, r);
+    const c = j === 1 ? [255, 120, 100] : [255, 255, 255];
+    gg.addColorStop(0, css(c, 0.22)); gg.addColorStop(1, css(c, 0));
+    ctx.fillStyle = gg; ctx.fillRect(0, 0, W, H);
+  });
+}
+function chrome(t, i, red, full) {
+  const onRed = Math.max(red, full) > 0.5, col = onRed ? '#fff' : INK;
+  const n = SC.length, x0 = 50, x1 = W - 50, gap = 10, sw = (x1 - x0 - gap * (n - 1)) / n;
+  for (let s = 0; s < n; s++) {
+    const p = s < i ? 1 : s > i ? 0 : seg(t, SC[s].a, SC[s].b);
+    ctx.fillStyle = onRed ? 'rgba(255,255,255,0.35)' : 'rgba(21,21,21,0.15)'; rr(x0 + s * (sw + gap), 60, sw, 7, 4); ctx.fill();
+    ctx.fillStyle = col; rr(x0 + s * (sw + gap), 60, sw * p, 7, 4); ctx.fill();
+  }
+  const label = 'MITO vs REALIDAD', lw = mw(label, 28, 800) + 60;
+  ctx.fillStyle = onRed ? 'rgba(255,255,255,0.18)' : 'rgba(230,51,41,0.1)'; rr(50, 100, lw, 60, 30); ctx.fill();
+  T(label, 50 + lw / 2, 140, 28, onRed ? '#fff' : REDC, { weight: 800 });
+  T('#01', 50 + lw + 20, 140, 28, col, { font: MONO(28), align: 'left' });
+  T('PABLO · COACH', W - 50, 140, 26, col, { font: MONO(26), align: 'right', alpha: 0.85 });
+}
+
+let GRAIN;
+function render(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  const { i, red, full } = bgParams(t);
+  background(t, red, full);
+  // escena saliente (sube y se desvanece) + entrante
+  const S = SC[i], next = SC[i + 1];
+  const k = next ? eInExpo(seg(t, next.a - 0.28, next.a)) : 0;
+  ctx.save(); ctx.globalAlpha = 1 - k; ctx.translate(0, -k * 140); S.fn(t - S.a); ctx.restore();
+  chrome(t, i, red, full);
+  // flash del sello MITO
+  const fl = 1 - seg(t, 3.8, 3.98); if (t >= 3.8 && fl > 0) { ctx.fillStyle = `rgba(255,255,255,${fl * 0.6})`; ctx.fillRect(0, 0, W, H); }
+  // composición
+  const shake = t >= 3.8 ? Math.exp(-(t - 3.8) * 9) * 18 : 0;
+  out.setTransform(1, 0, 0, 1, 0, 0); out.fillStyle = '#fff'; out.fillRect(0, 0, W, H);
+  out.save(); out.translate(Math.sin(t * 90) * shake, Math.cos(t * 70) * shake); if (shake > 0.5) { out.translate(CX, H / 2); out.scale(1.02, 1.02); out.translate(-CX, -H / 2); }
+  out.drawImage(buf, 0, 0); out.restore();
+  out.globalCompositeOperation = 'overlay'; out.globalAlpha = 0.05; out.drawImage(GRAIN[Math.floor(t * 30) % 4], 0, 0, W, H);
+  out.globalCompositeOperation = 'source-over'; out.globalAlpha = 1;
+}
+window.ready = (async () => {
+  await document.fonts.ready;
+  const r = rng(9); GRAIN = [];
+  for (let k = 0; k < 4; k++) { const c = mk(540, 960), g = c.getContext('2d'), im = g.createImageData(540, 960); for (let j = 0; j < im.data.length; j += 4) { const v = r() * 255; im.data[j] = im.data[j + 1] = im.data[j + 2] = v; im.data[j + 3] = 255; } g.putImageData(im, 0, 0); GRAIN.push(c); }
+  render(0); return true;
+})();
+window.frame = (t, q = 0.95) => { render(t); return cv.toDataURL('image/jpeg', q); };
+window.DUR = DUR;
+</script></body></html>
