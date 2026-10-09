@@ -1,0 +1,732 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Pablo Motion Reel</title>
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
+</head><body><canvas id="c"></canvas>
+<script>
+// ============================================================
+//  PABLO — MOTION REEL 2026
+//  Motor determinista: cada fotograma = render(t). 120 BPM.
+// ============================================================
+const W = 1920, H = 1080, DUR = 30, CX = W / 2, CY = H / 2;
+const C = { bg: '#0A0A0B', lime: '#C8FF2E', white: '#F5F5F0', orange: '#FF5A1F', ink: '#0A0A0B', navy: '#0D0F1C' };
+const LIME = [200, 255, 46];
+
+const cv = document.getElementById('c'); cv.width = W; cv.height = H;
+const out = cv.getContext('2d');
+const mk = (w = W, h = H) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+const buf = mk(), ctx = buf.getContext('2d');
+const tmp = mk(), tctx = tmp.getContext('2d');
+const tmp2 = mk(), t2 = tmp2.getContext('2d');
+
+// ---------- utilidades ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutExpo = x => x >= 1 ? 1 : 1 - Math.pow(2, -10 * x);
+const eInExpo = x => x <= 0 ? 0 : Math.pow(2, 10 * x - 10);
+const eInOutExpo = x => x <= 0 ? 0 : x >= 1 ? 1 : x < .5 ? Math.pow(2, 20 * x - 10) / 2 : (2 - Math.pow(2, -20 * x + 10)) / 2;
+const eInOutCubic = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const eOutCubic = x => 1 - Math.pow(1 - x, 3);
+const eOutBack = x => { const c1 = 2.0, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+const F = (size, weight = 900, fam = 'Inter Display') => `${weight} ${size}px "${fam}"`;
+const MONO = s => `500 ${s}px "DejaVu Sans Mono"`;
+
+function T(str, x, y, size, color, o = {}) {
+  const { weight = 900, fam = 'Inter Display', align = 'center', base = 'alphabetic', ls = 0, stroke = 0, alpha = 1, font } = o;
+  ctx.save();
+  ctx.font = font || F(size, weight, fam);
+  ctx.textAlign = align; ctx.textBaseline = base; ctx.letterSpacing = ls + 'px';
+  ctx.globalAlpha *= alpha;
+  const xx = align === 'center' ? x + ls / 2 : x;
+  if (stroke) { ctx.lineWidth = stroke; ctx.strokeStyle = color; ctx.lineJoin = 'round'; ctx.strokeText(str, xx, y); }
+  else { ctx.fillStyle = color; ctx.fillText(str, xx, y); }
+  ctx.restore();
+}
+function fit(str, maxW, weight = 900, fam = 'Inter Display') { ctx.save(); ctx.font = F(100, weight, fam); ctx.letterSpacing = '0px'; const w = ctx.measureText(str).width; ctx.restore(); return 100 * maxW / w; }
+function measure(str, size, weight = 900, fam = 'Inter Display') { ctx.save(); ctx.font = F(size, weight, fam); ctx.letterSpacing = '0px'; const w = ctx.measureText(str).width; ctx.restore(); return w; }
+
+// Letras que suben desde una máscara, con stagger
+function reveal(str, cx, y, size, color, t, t0, o = {}) {
+  const { stagger = 0.055, dur = 0.75, weight = 900, align = 'center', dir = 1, stroke = 0, ease = eOutExpo } = o;
+  ctx.save();
+  ctx.font = F(size, weight); ctx.letterSpacing = '0px'; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  const chars = [...str], ws = chars.map(c => ctx.measureText(c).width), total = ws.reduce((a, b) => a + b, 0);
+  let x = align === 'center' ? cx - total / 2 : align === 'right' ? cx - total : cx;
+  ctx.beginPath(); ctx.rect(0, y - size * 0.95, W, size * 1.18); ctx.clip();
+  chars.forEach((c, i) => {
+    const k = ease(seg(t, t0 + i * stagger, t0 + i * stagger + dur));
+    if (k > 0) {
+      const yy = y + (1 - k) * size * 1.15 * dir;
+      if (stroke) { ctx.lineWidth = stroke; ctx.strokeStyle = color; ctx.strokeText(c, x, yy); }
+      else { ctx.fillStyle = color; ctx.fillText(c, x, yy); }
+    }
+    x += ws[i];
+  });
+  ctx.restore();
+  return total;
+}
+function typewriter(str, x, y, size, color, t, t0, cps = 38, o = {}) {
+  const n = Math.floor(clamp((t - t0) * cps, 0, str.length));
+  if (t < t0) return;
+  const cursor = (n < str.length || Math.floor(t * 4) % 2 === 0) ? '▌' : '';
+  T(str.slice(0, n) + cursor, x, y, size, color, { font: MONO(size), align: o.align || 'left', ls: o.ls || 0, alpha: o.alpha ?? 1 });
+}
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function circ(x, y, r) { ctx.beginPath(); ctx.arc(x, y, Math.max(0, r), 0, Math.PI * 2); }
+
+// ---------- precomputados ----------
+function sampleText(str, size, n, seed, dy = 0) {
+  const c = mk(), g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.font = F(size); g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(str, CX, CY + dy);
+  const d = g.getImageData(0, 0, W, H).data, pts = [];
+  for (let y = 0; y < H; y += 4) for (let x = 0; x < W; x += 4) if (d[(y * W + x) * 4 + 3] > 128) pts.push([x, y]);
+  const r = rng(seed);
+  for (let i = pts.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [pts[i], pts[j]] = [pts[j], pts[i]]; }
+  const res = [];
+  for (let i = 0; i < n; i++) { const p = pts[i % pts.length]; res.push([p[0] + (r() - .5) * 2, p[1] + (r() - .5) * 2]); }
+  return res;
+}
+const NP = 3200;
+let T1, T2, PD, PR, PS, PC;
+const SPH = []; // esfera de Fibonacci
+for (let i = 0; i < NP; i++) {
+  const y = 1 - (i / (NP - 1)) * 2, r = Math.sqrt(1 - y * y), th = i * Math.PI * (3 - Math.sqrt(5));
+  SPH.push([Math.cos(th) * r, y, Math.sin(th) * r]);
+}
+const GLOBE = [];
+for (let lat = -80; lat <= 80; lat += 5) {
+  const n = Math.max(6, Math.round(72 * Math.cos(lat * Math.PI / 180)));
+  for (let j = 0; j < n; j++) GLOBE.push([lat * Math.PI / 180, (j / n) * Math.PI * 2]);
+}
+let GRAIN = [], VIG;
+function precompute() {
+  T1 = sampleText('-12KG', 400, NP, 11, -30);
+  T2 = sampleText('100%', 440, NP, 23, -30);
+  const r = rng(7); PD = []; PR = []; PS = []; PC = [];
+  for (let i = 0; i < NP; i++) { PD.push(r() * 0.28); PR.push(r()); PS.push(r()); PC.push(r() < 0.72 ? 0 : 1); }
+  const gr = rng(99);
+  for (let k = 0; k < 6; k++) {
+    const c = mk(960, 540), g = c.getContext('2d'), im = g.createImageData(960, 540);
+    for (let i = 0; i < im.data.length; i += 4) { const v = gr() * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); GRAIN.push(c);
+  }
+  VIG = mk(); const g = VIG.getContext('2d');
+  const grd = g.createRadialGradient(CX, CY, H * 0.35, CX, CY, H * 1.05);
+  grd.addColorStop(0, 'rgba(0,0,0,0)'); grd.addColorStop(1, 'rgba(0,0,0,0.6)');
+  g.fillStyle = grd; g.fillRect(0, 0, W, H);
+}
+
+// ============================================================
+//  ESCENA 1 — INTRO (0 – 3.5)
+// ============================================================
+function sIntro(t) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  const zoom = 1 + t * 0.012;
+  ctx.translate(CX, CY); ctx.scale(zoom, zoom); ctx.translate(-CX, -CY);
+  // anillos de onda
+  for (let i = 0; i < 6; i++) {
+    const st = 0.95 + i * 0.09, k = seg(t, st, st + 1.8);
+    if (k <= 0 || k >= 1) continue;
+    ctx.strokeStyle = rgba(LIME, (1 - k) * 0.55); ctx.lineWidth = 1 + (1 - k) * 7;
+    circ(CX, CY, eOutExpo(k) * 1150); ctx.stroke();
+  }
+  // líneas radiales que estallan
+  const kl = seg(t, 1.0, 1.9);
+  if (kl > 0 && kl < 1) {
+    for (let i = 0; i < 36; i++) {
+      const a = i / 36 * Math.PI * 2 + 0.04;
+      const head = eOutExpo(kl) * 1300, tail = eInOutCubic(kl) * 1300;
+      ctx.strokeStyle = i % 3 === 0 ? C.lime : rgba([245, 245, 240], 0.6);
+      ctx.lineWidth = i % 3 === 0 ? 4 : 1.5;
+      ctx.beginPath(); ctx.moveTo(CX + Math.cos(a) * (tail + 30), CY + Math.sin(a) * (tail + 30));
+      ctx.lineTo(CX + Math.cos(a) * (head + 30), CY + Math.sin(a) * (head + 30)); ctx.stroke();
+    }
+  }
+  // punto + latido
+  const appear = eOutBack(seg(t, 0.05, 0.45));
+  const pulse = Math.exp(-Math.max(0, t - 0.5) * 9) * (t > 0.5 ? 1 : 0);
+  const gone = eInExpo(seg(t, 0.92, 1.02));
+  const r = (16 + pulse * 26) * appear * (1 - gone) + gone * 0;
+  if (r > 0.3) {
+    ctx.fillStyle = C.lime; circ(CX, CY, r); ctx.fill();
+    ctx.strokeStyle = rgba(LIME, 0.4 * appear); ctx.lineWidth = 2; circ(CX, CY, r * 2.6 + pulse * 40); ctx.stroke();
+  }
+  // logotipo
+  if (t > 1.0) {
+    const tw = reveal('PABLO', CX, CY + 95, 300, C.white, t, 1.08, { stagger: 0.06, dur: 0.8 });
+    const kb = eOutExpo(seg(t, 1.6, 2.3));
+    ctx.fillStyle = C.lime; ctx.fillRect(CX - tw / 2 * kb, CY + 135, tw * kb, 10);
+    const ks = eOutExpo(seg(t, 1.9, 2.9));
+    T('MOTION DESIGN SHOWREEL — 2026', CX, CY + 205, 26, C.white, { font: MONO(26), ls: lerp(0, 16, ks), alpha: ks });
+    // marcas de esquina estilo visor
+    const kc = eOutExpo(seg(t, 1.3, 2.0));
+    ctx.strokeStyle = C.lime; ctx.lineWidth = 3;
+    const bx = lerp(260, tw / 2 + 80, kc), by = lerp(60, 260, kc);
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy]) => {
+      const x = CX + sx * bx, y = CY + 20 + sy * by;
+      ctx.beginPath(); ctx.moveTo(x, y - sy * 40); ctx.lineTo(x, y); ctx.lineTo(x - sx * 40, y); ctx.globalAlpha = kc; ctx.stroke(); ctx.globalAlpha = 1;
+    });
+  }
+}
+
+// ============================================================
+//  ESCENA 2 — TIPOGRAFÍA CINÉTICA (3.5 – 8)
+// ============================================================
+const WORDS2 = [
+  { w: 'DISCIPLINA', t0: 0.0, bg: C.bg, fg: C.white, acc: C.lime, n: '01' },
+  { w: 'CONSTANCIA', t0: 1.25, bg: C.lime, fg: C.ink, acc: C.ink, n: '02' },
+  { w: 'RESULTADOS', t0: 2.5, bg: C.white, fg: C.ink, acc: C.orange, n: '03' },
+];
+function sKinetic(t) {
+  if (t >= 3.75) return sinExcusas(t - 3.75);
+  let idx = 0; WORDS2.forEach((w, i) => { if (t >= w.t0) idx = i; });
+  const Wd = WORDS2[idx], lt = t - Wd.t0;
+  ctx.fillStyle = Wd.bg; ctx.fillRect(0, 0, W, H);
+  // filas de fondo con contorno
+  const fsz = 170;
+  ctx.save(); ctx.globalAlpha = 0.13;
+  for (let r = -1; r < 7; r++) {
+    const dir = r % 2 ? 1 : -1, off = ((t * 260 * dir) % 1400 + 2800) % 1400;
+    const line = (Wd.w + '  ').repeat(6);
+    T(line, -off, r * 175 + 60, fsz, Wd.fg, { stroke: 2, align: 'left' });
+  }
+  ctx.restore();
+  // palabra principal: split top/bottom
+  const size = fit(Wd.w, W * 0.86), k = eOutExpo(seg(lt, 0, 0.45));
+  const s = lerp(1.25, 1, k) + lt * 0.025;
+  const by = CY + size * 0.36;
+  for (let half = 0; half < 2; half++) {
+    ctx.save();
+    ctx.beginPath(); half ? ctx.rect(0, by - size * 0.36, W, H) : ctx.rect(0, 0, W, by - size * 0.36); ctx.clip();
+    ctx.translate(CX + (half ? 1 : -1) * (1 - k) * 900, CY); ctx.scale(s, s); ctx.translate(-CX, -CY);
+    T(Wd.w, CX, by, size, Wd.fg);
+    ctx.restore();
+  }
+  // barra acento + datos
+  const ka = eOutExpo(seg(lt, 0.15, 0.6));
+  ctx.fillStyle = Wd.acc; ctx.fillRect(140, CY + size * 0.55, 380 * ka, 12);
+  T(Wd.n + ' / 03', 140, CY + size * 0.55 + 70, 28, Wd.fg, { font: MONO(28), align: 'left', alpha: ka });
+  T('MENTALIDAD', W - 140, CY + size * 0.55 + 70, 28, Wd.fg, { font: MONO(28), align: 'right', alpha: ka, ls: 8 });
+  // flash de entrada
+  const fl = 1 - seg(lt, 0, 0.12);
+  if (idx > 0 && fl > 0) { ctx.fillStyle = `rgba(255,255,255,${fl * 0.7})`; ctx.fillRect(0, 0, W, H); }
+}
+function sinExcusas(lt) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  const k1 = eOutExpo(seg(lt, 0, 0.35));
+  ctx.save(); ctx.globalAlpha = k1;
+  T('SIN', CX, lerp(-100, 360, k1), 190, C.white);
+  ctx.restore();
+  const sz = fit('EXCUSAS.', W * 0.82), k2 = eOutExpo(seg(lt, 0.2, 0.5));
+  ctx.save(); ctx.translate(CX, 700); ctx.scale(lerp(1.6, 1, k2), lerp(1.6, 1, k2)); ctx.translate(-CX, -700);
+  ctx.globalAlpha = k2;
+  T('EXCUSAS.', CX, 700, sz, C.lime, { stroke: 4 });
+  const kf = eInOutExpo(seg(lt, 0.3, 0.6));
+  ctx.beginPath(); ctx.rect(0, 0, W * kf, H); ctx.clip();
+  T('EXCUSAS.', CX, 700, sz, C.lime);
+  ctx.restore();
+}
+
+// ============================================================
+//  ESCENA 3 — NUTRICIÓN / DATA VIZ (8 – 12.5)
+// ============================================================
+const MAC = [
+  { n: 'PROTEÍNA', g: 180, kc: 720, col: C.lime },
+  { n: 'CARBOHIDRATOS', g: 275, kc: 1100, col: C.white },
+  { n: 'GRASAS', g: 70, kc: 630, col: C.orange },
+]; // 720 + 1100 + 630 = 2450 kcal
+const DX = 600, DY = 640, DR = 230;
+function sNutri(t) {
+  ctx.fillStyle = '#0B0B0D'; ctx.fillRect(0, 0, W, H);
+  // rejilla
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 16; i++) {
+    const k = eOutExpo(seg(t, i * 0.03, i * 0.03 + 0.8)), x = i * 120;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H * k); ctx.stroke();
+  }
+  for (let j = 0; j <= 9; j++) {
+    const k = eOutExpo(seg(t, j * 0.04, j * 0.04 + 0.8)), y = j * 120;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W * k, y); ctx.stroke();
+  }
+  // títulos
+  typewriter('/ PLAN NUTRICIONAL PERSONALIZADO', 120, 140, 22, C.lime, t, 0.15, 60);
+  reveal('NUTRICIÓN', 115, 240, 92, C.white, t, 0.2, { align: 'left', stagger: 0.03 });
+  reveal('DE PRECISIÓN', 115, 335, 92, C.lime, t, 0.32, { align: 'left', stagger: 0.03 });
+  // donut
+  const rot = t * 0.06;
+  ctx.lineCap = 'butt';
+  const kt = eOutExpo(seg(t, 0.2, 0.9));
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 46;
+  ctx.beginPath(); ctx.arc(DX, DY, DR, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * kt); ctx.stroke();
+  let a0 = -Math.PI / 2 + rot; const tot = 2450, gap = 0.035;
+  MAC.forEach((m, i) => {
+    const span = m.kc / tot * Math.PI * 2;
+    const k = eInOutCubic(seg(t, 0.4 + i * 0.22, 1.25 + i * 0.22));
+    if (k > 0) {
+      ctx.strokeStyle = m.col; ctx.lineWidth = 46;
+      ctx.beginPath(); ctx.arc(DX, DY, DR, a0 + gap, a0 + gap + (span - gap * 2) * k); ctx.stroke();
+      // etiqueta %
+      const am = a0 + span / 2, kp = seg(t, 1.2 + i * 0.22, 1.6 + i * 0.22);
+      T(Math.round(m.kc / tot * 100) + '%', DX + Math.cos(am) * (DR + 78), DY + Math.sin(am) * (DR + 78) + 10, 28, m.col, { font: MONO(28), alpha: kp });
+    }
+    a0 += span;
+  });
+  // anillo exterior punteado giratorio
+  ctx.save(); ctx.setLineDash([2, 14]); ctx.lineDashOffset = -t * 40;
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2; circ(DX, DY, DR + 44 * kt); ctx.stroke(); ctx.restore();
+  // contador central
+  const kc = eOutExpo(seg(t, 0.4, 2.0)), val = Math.round(2450 * kc);
+  T(val.toLocaleString('es-ES').replace(',', '.').padStart(1), DX, DY + 30, 108, C.white, { alpha: seg(t, 0.35, 0.6) });
+  T('KCAL / DÍA', DX, DY + 82, 24, C.lime, { font: MONO(24), ls: 6, alpha: seg(t, 0.5, 0.9) });
+  // barras macro
+  MAC.forEach((m, i) => {
+    const y = 520 + i * 165, x = 1060, bw = 700;
+    const k = eOutExpo(seg(t, 0.6 + i * 0.15, 1.6 + i * 0.15)), ka = seg(t, 0.55 + i * 0.15, 0.85 + i * 0.15);
+    ctx.save(); ctx.globalAlpha = ka; ctx.translate((1 - ka) * 60, 0);
+    T(m.n, x, y, 34, C.white, { weight: 700, align: 'left', ls: 3 });
+    T(Math.round(m.g * k) + ' g', x + bw, y, 44, m.col, { align: 'right' });
+    ctx.fillStyle = 'rgba(255,255,255,0.08)'; rr(x, y + 28, bw, 16, 8); ctx.fill();
+    ctx.fillStyle = m.col; rr(x, y + 28, Math.max(16, bw * (m.kc / 1200) * k), 16, 8); ctx.fill();
+    T(Math.round(m.kc * k) + ' kcal', x, y + 82, 22, 'rgba(245,245,240,0.55)', { font: MONO(22), align: 'left' });
+    ctx.restore();
+  });
+  // marquesina inferior
+  ctx.fillStyle = C.lime; ctx.fillRect(0, H - 64, W, 64);
+  const mq = 'ADHERENCIA  ✦  SACIEDAD  ✦  RENDIMIENTO  ✦  SOSTENIBLE  ✦  ';
+  T(mq.repeat(4), -((t * 220) % measure(mq, 26, 700, 'Inter')), H - 22, 26, C.ink, { weight: 700, fam: 'Inter', align: 'left', ls: 4 });
+}
+
+// ============================================================
+//  ESCENA 4 — PARTÍCULAS / TRANSFORMACIÓN (12.5 – 17)
+// ============================================================
+function ppos(i, lt) {
+  const d = PD[i], p = SPH[i];
+  const a = lt * 0.9 + 0.5, tl = 0.35, R = 300 * (1 + 0.04 * Math.sin(lt * 3));
+  let x = p[0] * Math.cos(a) - p[2] * Math.sin(a), z = p[0] * Math.sin(a) + p[2] * Math.cos(a), y = p[1];
+  const y2 = y * Math.cos(tl) - z * Math.sin(tl), z2 = y * Math.sin(tl) + z * Math.cos(tl);
+  const persp = 900 / (900 + z2 * R);
+  let sx = CX + x * R * persp, sy = CY - 30 + y2 * R * persp;
+  const k1 = eInOutExpo(seg(lt, 0.9 + d, 1.65 + d)), k2 = eInOutExpo(seg(lt, 2.45 + d, 3.1 + d));
+  const A = T1[i], B = T2[i];
+  let px = lerp(sx, A[0], k1), py = lerp(sy, A[1], k1);
+  px = lerp(px, B[0], k2); py = lerp(py, B[1], k2);
+  const sw = Math.sin(k1 * Math.PI) + Math.sin(k2 * Math.PI);
+  px += (PR[i] - 0.5) * 420 * sw; py += (PS[i] - 0.5) * 420 * sw;
+  const hold = Math.max(k1, k2);
+  px += Math.sin(lt * 4 + i) * 1.6 * hold; py += Math.cos(lt * 3.3 + i * 1.7) * 1.6 * hold;
+  const ke = eInExpo(seg(lt, 3.75 + d * 0.6, 4.45));
+  px += (px - CX) * ke * 3.2 + (PR[i] - .5) * 600 * ke; py += (py - CY) * ke * 3.2 + (PS[i] - .5) * 600 * ke;
+  return [px, py, lerp(persp, 1, hold), z2];
+}
+function sParticles(t) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(CX, CY, 0, CX, CY, 800);
+  g.addColorStop(0, 'rgba(200,255,46,0.10)'); g.addColorStop(1, 'rgba(200,255,46,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const dt = 1 / 30;
+  ctx.lineCap = 'round';
+  for (let grp = 0; grp < 2; grp++) {
+    ctx.strokeStyle = grp ? C.white : C.lime; ctx.lineWidth = grp ? 2.2 : 2.8;
+    ctx.beginPath();
+    for (let i = 0; i < NP; i++) {
+      if (PC[i] !== grp) continue;
+      const p = ppos(i, t), q = ppos(i, t - dt);
+      if (p[3] > 0.35 && t < 0.9) continue; // cara trasera de la esfera más tenue
+      ctx.moveTo(q[0], q[1]); ctx.lineTo(p[0] + 0.01, p[1]);
+    }
+    ctx.stroke();
+  }
+  // cara trasera tenue
+  if (t < 1.4) {
+    ctx.strokeStyle = 'rgba(200,255,46,0.25)'; ctx.lineWidth = 1.5; ctx.beginPath();
+    for (let i = 0; i < NP; i += 2) { const p = ppos(i, t); if (p[3] > 0.35) { ctx.moveTo(p[0], p[1]); ctx.lineTo(p[0] + 0.5, p[1]); } }
+    ctx.stroke();
+  }
+  // etiquetas
+  const l1 = seg(t, 1.7, 1.95) * (1 - seg(t, 2.35, 2.5));
+  if (l1 > 0) reveal('TRANSFORMACIÓN FÍSICA', CX, CY + 250, 44, C.white, t, 1.7, { stagger: 0.012, dur: 0.5, weight: 800 });
+  const l2 = seg(t, 3.15, 3.4) * (1 - seg(t, 3.7, 3.85));
+  if (l2 > 0) reveal('COMPROMISO TOTAL', CX, CY + 250, 44, C.lime, t, 3.15, { stagger: 0.015, dur: 0.5, weight: 800 });
+  if (t < 0.95) {
+    const k = seg(t, -0.2, 0.3) * (1 - seg(t, 0.75, 0.9));
+    T('04 — TRANSFORMACIÓN', CX, CY + 420, 24, C.white, { font: MONO(24), ls: 10, alpha: k });
+  }
+}
+
+// ============================================================
+//  ESCENA 5 — TÚNEL DE VELOCIDAD / HUD (17 – 21)
+// ============================================================
+function sTunnel(t) {
+  ctx.fillStyle = '#050506'; ctx.fillRect(0, 0, W, H);
+  const roll = Math.sin(t * 0.9) * 0.05;
+  ctx.save(); ctx.translate(CX, CY); ctx.rotate(roll); ctx.translate(-CX, -CY);
+  const f = 820, P = (X, Y, Z) => [CX + X * f / Z, CY + Y * f / Z];
+  const hg = ctx.createLinearGradient(0, CY - 160, 0, CY + 160);
+  hg.addColorStop(0, 'rgba(200,255,46,0)'); hg.addColorStop(0.5, 'rgba(200,255,46,0.22)'); hg.addColorStop(1, 'rgba(200,255,46,0)');
+  ctx.fillStyle = hg; ctx.fillRect(-200, CY - 160, W + 400, 320);
+  const speed = 2400 + t * 900;
+  const dist = 2400 * t + 450 * t * t;
+  for (const Yp of [300, -300]) {
+    const amul = Yp > 0 ? 1 : 0.45;
+    ctx.lineWidth = 2;
+    for (let X = -3600; X <= 3600; X += 300) {
+      const a = P(X, Yp, 70), b = P(X, Yp, 7000);
+      const g = ctx.createLinearGradient(a[0], a[1], b[0], b[1]);
+      g.addColorStop(0, rgba(LIME, 0.9 * amul)); g.addColorStop(1, rgba(LIME, 0));
+      ctx.strokeStyle = g; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+    const off = dist % 300;
+    for (let z = 300 - off; z < 7000; z += 300) {
+      if (z < 70) continue;
+      const a = P(-3600, Yp, z), b = P(3600, Yp, z);
+      ctx.strokeStyle = rgba(LIME, (1 - z / 7000) * 0.9 * amul); ctx.lineWidth = Math.max(1, 3 * 300 / z);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+  }
+  // estelas de velocidad
+  const r = rng(5);
+  for (let i = 0; i < 160; i++) {
+    const ang = r() * Math.PI * 2, ph = (r() + t * (0.7 + r() * 0.9)) % 1, r0 = Math.pow(ph, 2.4) * 1400 + 30, len = 10 + Math.pow(ph, 3) * 420;
+    ctx.strokeStyle = `rgba(245,245,240,${ph * 0.7})`; ctx.lineWidth = 1 + ph * 2;
+    ctx.beginPath(); ctx.moveTo(CX + Math.cos(ang) * r0, CY + Math.sin(ang) * r0); ctx.lineTo(CX + Math.cos(ang) * (r0 + len), CY + Math.sin(ang) * (r0 + len)); ctx.stroke();
+  }
+  // palabras volando hacia la cámara
+  const words = [['RENDIMIENTO', 0.0], ['FUERZA', 1.0], ['POTENCIA', 1.95], ['ENFOQUE', 2.85]];
+  for (let j = words.length - 1; j >= 0; j--) {
+    const [w, st] = words[j], p = seg(t, st, st + 1.45);
+    if (p <= 0 || p >= 1) continue;
+    const s = 0.06 * Math.pow(45, p), a = p < 0.15 ? p / 0.15 : p > 0.78 ? (1 - p) / 0.22 : 1;
+    ctx.save(); ctx.translate(CX, CY); ctx.scale(s, s); ctx.globalAlpha = a;
+    T(w, 0, 60, 180, C.lime, { stroke: 6 / Math.max(s, 0.6) });
+    T(w, 0, 60, 180, C.white, { alpha: 0.92 });
+    ctx.restore();
+  }
+  ctx.restore();
+  // HUD
+  const kh = eOutExpo(seg(t, 0.2, 0.8));
+  ctx.save(); ctx.globalAlpha = kh;
+  hudBox(110, 790, 'FRECUENCIA CARDÍACA', Math.round(168 + Math.sin(t * 5) * 4 + t * 2) + ' BPM', t, true);
+  hudBox(W - 470, 790, 'SERIE · RPE', '4 / 4 · RPE 9', t, false);
+  // mira central
+  ctx.strokeStyle = 'rgba(200,255,46,0.7)'; ctx.lineWidth = 2;
+  const cr = 46 + Math.sin(t * 6) * 4;
+  circ(CX, CY, cr); ctx.stroke();
+  [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([a, b]) => { ctx.beginPath(); ctx.moveTo(CX + a * (cr + 8), CY + b * (cr + 8)); ctx.lineTo(CX + a * (cr + 30), CY + b * (cr + 30)); ctx.stroke(); });
+  T('05 — RENDIMIENTO', CX, 110, 24, C.white, { font: MONO(24), ls: 10, alpha: 0.8 });
+  ctx.restore();
+}
+function hudBox(x, y, label, val, t, ecg) {
+  const w = 360, h = 170;
+  ctx.fillStyle = 'rgba(10,10,11,0.75)'; ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = C.lime; ctx.lineWidth = 2;
+  [[0, 0, 1, 1], [w, 0, -1, 1], [0, h, 1, -1], [w, h, -1, -1]].forEach(([a, b, sx, sy]) => { ctx.beginPath(); ctx.moveTo(x + a, y + b + sy * 22); ctx.lineTo(x + a, y + b); ctx.lineTo(x + a + sx * 22, y + b); ctx.stroke(); });
+  T(label, x + 24, y + 42, 18, C.lime, { font: MONO(18), align: 'left', ls: 3 });
+  T(val, x + 24, y + 100, 46, C.white, { align: 'left' });
+  if (ecg) {
+    ctx.strokeStyle = C.lime; ctx.lineWidth = 2; ctx.beginPath();
+    for (let i = 0; i <= 300; i += 3) {
+      const ph = ((i / 300) * 2 + t * 1.4) % 1;
+      const v = ph > 0.45 && ph < 0.5 ? -Math.sin((ph - 0.45) / 0.05 * Math.PI) * 26 : ph > 0.5 && ph < 0.54 ? Math.sin((ph - 0.5) / 0.04 * Math.PI) * 10 : Math.sin(ph * 30) * 1.2;
+      i ? ctx.lineTo(x + 30 + i, y + 140 + v) : ctx.moveTo(x + 30 + i, y + 140 + v);
+    }
+    ctx.stroke();
+  } else {
+    for (let i = 0; i < 4; i++) { ctx.fillStyle = i < 4 ? C.lime : 'rgba(255,255,255,0.2)'; ctx.fillRect(x + 24 + i * 80, y + 130, 66, 12); }
+  }
+}
+
+// ============================================================
+//  ESCENA 6 — PLATAFORMAS + GLOBO (21 – 25)
+// ============================================================
+const COLS = [
+  { name: 'TIKTOK', sub: 'TENDENCIAS · MOTIVACIÓN', bg: '#111113', fg: C.white, icon: 'tt' },
+  { name: 'INSTAGRAM', sub: 'REELS · CARRUSELES', bg: C.lime, fg: C.ink, icon: 'ig' },
+  { name: 'YOUTUBE', sub: 'VÍDEOS LARGOS · SHORTS', bg: C.white, fg: C.ink, icon: 'yt' },
+];
+function iconTT(x, y, s, col) {
+  const draw = (dx, dy, c) => {
+    ctx.strokeStyle = c; ctx.lineWidth = s * 0.17; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x + dx + s * 0.1, y + dy - s * 0.62); ctx.lineTo(x + dx + s * 0.1, y + dy + s * 0.28); ctx.stroke();
+    circ(x + dx - s * 0.16, y + dy + s * 0.28, s * 0.26); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + dx + s * 0.1, y + dy - s * 0.62); ctx.quadraticCurveTo(x + dx + s * 0.18, y + dy - s * 0.25, x + dx + s * 0.55, y + dy - s * 0.22); ctx.stroke();
+  };
+  draw(-6, -4, C.lime); draw(6, 4, C.orange); draw(0, 0, col);
+}
+function iconIG(x, y, s, col, t) {
+  ctx.strokeStyle = col; ctx.lineWidth = s * 0.12;
+  rr(x - s * 0.6, y - s * 0.6, s * 1.2, s * 1.2, s * 0.34); ctx.stroke();
+  circ(x, y, s * 0.27); ctx.stroke();
+  ctx.fillStyle = col; circ(x + s * 0.33, y - s * 0.33, s * 0.07); ctx.fill();
+  ctx.save(); ctx.setLineDash([24, 14]); ctx.lineDashOffset = -t * 120; ctx.lineWidth = 5;
+  circ(x, y, s * 1.02); ctx.stroke(); ctx.restore();
+}
+function iconYT(x, y, s, col, bg) {
+  ctx.fillStyle = col; rr(x - s * 0.78, y - s * 0.54, s * 1.56, s * 1.08, s * 0.3); ctx.fill();
+  ctx.fillStyle = bg; ctx.beginPath(); ctx.moveTo(x - s * 0.2, y - s * 0.3); ctx.lineTo(x - s * 0.2, y + s * 0.3); ctx.lineTo(x + s * 0.32, y); ctx.closePath(); ctx.fill();
+}
+function sPlatforms(t) {
+  // fondo: globo + Irlanda
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  if (t > 2.2) globe(t);
+  const cw = W / 3;
+  COLS.forEach((c, i) => {
+    const kin = eOutExpo(seg(t, i * 0.08, 0.7 + i * 0.08)), kout = eInExpo(seg(t, 2.25 + i * 0.07, 2.75 + i * 0.07));
+    const dir = i % 2 ? -1 : 1, oy = (1 - kin) * H * dir - kout * H * dir;
+    if (kout >= 1) return;
+    ctx.save(); ctx.translate(0, oy);
+    ctx.fillStyle = c.bg; ctx.fillRect(i * cw, 0, cw + 1, H);
+    const x = i * cw + cw / 2, ki = eOutBack(seg(t, 0.3 + i * 0.1, 0.9 + i * 0.1));
+    T('0' + (i + 1), i * cw + 50, 90, 24, c.fg, { font: MONO(24), align: 'left' });
+    T('●  EN DIRECTO', i * cw + cw - 50, 90, 20, c.fg, { font: MONO(20), align: 'right', alpha: Math.floor(t * 3) % 2 ? 1 : 0.4 });
+    ctx.save(); ctx.translate(x, 420); ctx.scale(ki, ki); ctx.translate(-x, -420);
+    if (c.icon === 'tt') iconTT(x, 420, 170, c.fg);
+    if (c.icon === 'ig') iconIG(x, 420, 150, c.fg, t);
+    if (c.icon === 'yt') iconYT(x, 420, 160, C.orange, c.bg);
+    ctx.restore();
+    reveal(c.name, x, 680, 84, c.fg, t, 0.45 + i * 0.1, { stagger: 0.03 });
+    T(c.sub, x, 740, 22, c.fg, { font: MONO(22), ls: 3, alpha: seg(t, 0.8 + i * 0.1, 1.1 + i * 0.1) });
+    if (c.icon === 'tt') for (let b = 0; b < 7; b++) { const hgt = 16 + Math.abs(Math.sin(t * 7 + b * 1.3)) * 70; ctx.fillStyle = b % 2 ? C.lime : c.fg; ctx.fillRect(x - 140 + b * 42, 880 - hgt, 26, hgt); }
+    if (c.icon === 'ig') for (let b = 0; b < 5; b++) { ctx.fillStyle = c.fg; ctx.globalAlpha = b === Math.floor(t * 3) % 5 ? 1 : 0.3; circ(x - 100 + b * 50, 850, 12); ctx.fill(); ctx.globalAlpha = 1; }
+    if (c.icon === 'yt') { const p = eInOutCubic(seg(t, 0.7, 2.3)); ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(x - 200, 846, 400, 8); ctx.fillStyle = C.orange; ctx.fillRect(x - 200, 846, 400 * p, 8); circ(x - 200 + 400 * p, 850, 14); ctx.fill(); }
+    ctx.restore();
+  });
+}
+function globe(t) {
+  const lt = t - 2.2, gx = CX, gy = 700, R = 300;
+  const rot = 0.143 + (t - 3.5) * 0.35, tilt = 0.6;
+  const k = eOutExpo(seg(lt, 0, 0.9));
+  const proj = (lat, lon) => {
+    const x = Math.cos(lat) * Math.sin(lon + rot), y = -Math.sin(lat), z = Math.cos(lat) * Math.cos(lon + rot);
+    const y2 = y * Math.cos(tilt) + z * Math.sin(tilt), z2 = -y * Math.sin(tilt) + z * Math.cos(tilt);
+    return [gx + x * R * k, gy + y2 * R * k, z2];
+  };
+  ctx.fillStyle = 'rgba(200,255,46,0.06)'; circ(gx, gy, R * k); ctx.fill();
+  GLOBE.forEach(([la, lo]) => {
+    const p = proj(la, lo); if (p[2] < 0) return;
+    ctx.fillStyle = rgba(LIME, 0.15 + p[2] * 0.5); ctx.fillRect(p[0] - 1.5, p[1] - 1.5, 3, 3);
+  });
+  ctx.strokeStyle = 'rgba(200,255,46,0.5)'; ctx.lineWidth = 2; circ(gx, gy, R * k); ctx.stroke();
+  // pin Irlanda
+  const ir = proj(53.4 * Math.PI / 180, -8.2 * Math.PI / 180), kp = eOutBack(seg(lt, 0.7, 1.1));
+  if (ir[2] > 0 && kp > 0) {
+    for (let i = 0; i < 3; i++) { const ph = ((lt * 1.2) + i / 3) % 1; ctx.strokeStyle = rgba([255, 90, 31], 1 - ph); ctx.lineWidth = 3; circ(ir[0], ir[1], ph * 60 * kp); ctx.stroke(); }
+    ctx.fillStyle = C.orange; circ(ir[0], ir[1], 11 * kp); ctx.fill();
+    const kl = eOutExpo(seg(lt, 0.9, 1.4));
+    ctx.strokeStyle = C.white; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(ir[0] + 14, ir[1] - 14); ctx.lineTo(ir[0] + 14 + 90 * kl, ir[1] - 104 * kl); ctx.lineTo(ir[0] + 14 + 90 * kl + 260 * kl, ir[1] - 104 * kl); ctx.stroke();
+    T('IRLANDA', ir[0] + 110, ir[1] - 120, 40, C.white, { alpha: seg(lt, 1.1, 1.4), align: 'left' });
+    T('53.4°N  8.2°W', ir[0] + 110, ir[1] - 72, 20, C.lime, { font: MONO(20), alpha: seg(lt, 1.2, 1.5), align: 'left' });
+  }
+  typewriter('/ ENTRENAMIENTO', CX, 170, 24, C.lime, t, 2.55, 40, { align: 'center', ls: 6 });
+  reveal('ONLINE & PRESENCIAL', CX, 300, 116, C.white, t, 2.6, { stagger: 0.025 });
+}
+
+// ============================================================
+//  ESCENA 7 — MONTAJE RÁPIDO (25 – 27.5)
+// ============================================================
+function sMontage(t) {
+  const words = [
+    { w: 'ENTRENA', st: 0.0, bg: C.bg, fg: C.white, wipe: 'slice' },
+    { w: 'COME', st: 0.5, bg: C.lime, fg: C.ink, wipe: 'circle' },
+    { w: 'DUERME', st: 1.0, bg: C.navy, fg: C.white, wipe: 'diag' },
+    { w: 'REPITE', st: 1.5, bg: C.white, fg: C.ink, wipe: 'doors' },
+  ];
+  words.forEach((o, i) => {
+    const lt = t - o.st; if (lt < 0 || t >= 2.0 && i < 3) return;
+    const k = eOutExpo(seg(lt, 0, 0.22));
+    ctx.save();
+    ctx.beginPath();
+    if (o.wipe === 'slice') { for (let b = 0; b < 8; b++) { const kk = eOutExpo(seg(lt, b * 0.015, 0.2 + b * 0.015)); ctx.rect(0, b * H / 8, W * kk, H / 8 + 1); } }
+    if (o.wipe === 'circle') ctx.arc(CX, CY, k * 1200, 0, Math.PI * 2);
+    if (o.wipe === 'diag') { const x = lerp(-W, W * 1.2, k); ctx.moveTo(-400, 0); ctx.lineTo(x + 500, 0); ctx.lineTo(x, H); ctx.lineTo(-400, H); }
+    if (o.wipe === 'doors') { const hh = H / 2 * k; ctx.rect(0, CY - hh, W, hh * 2); }
+    ctx.clip();
+    ctx.fillStyle = o.bg; ctx.fillRect(0, 0, W, H);
+    const size = fit(o.w, W * (o.w.length < 5 ? 0.62 : 0.8));
+    if (o.w === 'ENTRENA') {
+      const x = CX + (1 - eOutExpo(seg(lt, 0, 0.3))) * 1400;
+      for (let g = 4; g > 0; g--) T(o.w, x + g * 70 * (1 - seg(lt, 0, 0.35)), CY + size * 0.36, size, C.lime, { alpha: 0.15 });
+      T(o.w, x, CY + size * 0.36, size, o.fg);
+      ctx.fillStyle = C.lime; ctx.fillRect(0, CY + size * 0.5, W * eOutExpo(seg(lt, 0.1, 0.4)), 8);
+    }
+    if (o.w === 'COME') { const s = lerp(0.4, 1, eOutBack(seg(lt, 0, 0.35))) + lt * 0.05; ctx.translate(CX, CY); ctx.scale(s, s); ctx.translate(-CX, -CY); T(o.w, CX, CY + size * 0.36, size, o.fg); }
+    if (o.w === 'DUERME') {
+      reveal(o.w, CX, CY + size * 0.36, size, o.fg, lt, 0.02, { stagger: 0.04, dur: 0.35 });
+      ctx.fillStyle = C.lime; circ(W - 260, 230, 70); ctx.fill(); ctx.fillStyle = o.bg; circ(W - 230, 205, 64); ctx.fill();
+      const r = rng(3); for (let s = 0; s < 40; s++) { ctx.fillStyle = `rgba(245,245,240,${0.3 + 0.7 * Math.abs(Math.sin(t * 6 + s))})`; ctx.fillRect(r() * W, r() * H * 0.4, 3, 3); }
+    }
+    if (o.w === 'REPITE') {
+      const sy = eOutExpo(seg(lt, 0, 0.3));
+      ctx.translate(CX, CY); ctx.scale(1, sy); ctx.translate(-CX, -CY);
+      T(o.w, CX, CY + size * 0.36, size, o.fg);
+      // flecha circular
+      ctx.restore(); ctx.save();
+      if (t < 2.0) { ctx.strokeStyle = C.orange; ctx.lineWidth = 12; ctx.lineCap = 'round'; const a = -Math.PI / 2 + lt * 6; ctx.beginPath(); ctx.arc(CX, CY + size * 0.75, 60, a, a + Math.PI * 1.5); ctx.stroke(); }
+    }
+    ctx.restore();
+  });
+  // ráfaga final: rejilla de REPITE
+  if (t >= 2.0) {
+    const lt = t - 2.0;
+    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+    const s = 1 + eInExpo(seg(lt, 0, 0.5)) * 0.8;
+    ctx.save(); ctx.translate(CX, CY); ctx.scale(s, s); ctx.rotate(-0.08); ctx.translate(-CX, -CY);
+    for (let r = -2; r < 12; r++) {
+      const dir = r % 2 ? 1 : -1, off = ((lt * 1600 * dir) % 1000 + 2000) % 1000;
+      const line = 'REPITE  '.repeat(8);
+      T(line, -off - 200, r * 120, 120, r % 3 === 0 ? C.lime : C.white, { stroke: r % 2 ? 0 : 2.5, align: 'left' });
+    }
+    ctx.restore();
+  }
+  // flash por palabra
+  [0.5, 1.0, 1.5, 2.0].forEach(s => { const f = 1 - seg(t, s, s + 0.08); if (t >= s && f > 0) { ctx.fillStyle = `rgba(255,255,255,${f * 0.5})`; ctx.fillRect(0, 0, W, H); } });
+}
+
+// ============================================================
+//  ESCENA 8 — OUTRO / LOGO (27.5 – 30)
+// ============================================================
+function sOutro(t) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  const km = eInOutExpo(seg(t, 0.75, 1.25));
+  const rx = lerp(CX, 560, km), ry = 500, R = 190;
+  // anillo
+  const ka = eInOutCubic(seg(t, 0.05, 0.75));
+  ctx.strokeStyle = C.lime; ctx.lineWidth = 10; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(rx, ry, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ka); ctx.stroke();
+  ctx.save(); ctx.setLineDash([3, 12]); ctx.lineDashOffset = t * 30; ctx.strokeStyle = 'rgba(245,245,240,0.35)'; ctx.lineWidth = 2;
+  circ(rx, ry, R + 34 * eOutExpo(seg(t, 0.3, 0.9))); ctx.stroke(); ctx.restore();
+  // monograma
+  const kp = eOutBack(seg(t, 0.25, 0.7));
+  ctx.save(); ctx.translate(rx, ry); ctx.scale(kp, kp); ctx.translate(-rx, -ry);
+  T('P', rx, ry + 92, 260, C.white); ctx.restore();
+  // nombre
+  if (t > 0.85) {
+    reveal('PABLO', 830, 560, 230, C.white, t, 0.95, { align: 'left', stagger: 0.05, dur: 0.7 });
+    const kl = eOutExpo(seg(t, 1.2, 1.7));
+    ctx.fillStyle = C.lime; ctx.fillRect(838, 600, 600 * kl, 8);
+    T('ENTRENADOR ONLINE · FITNESS · NUTRICIÓN', 838, 655, 24, C.lime, { font: MONO(24), align: 'left', ls: lerp(0, 4, kl), alpha: kl });
+  }
+  // CTA
+  if (t > 1.35) {
+    const kc = eOutExpo(seg(t, 1.35, 1.8));
+    ctx.save(); ctx.globalAlpha = kc; ctx.translate(0, (1 - kc) * 30);
+    rr(CX - 430, 840, 860, 92, 46); ctx.fillStyle = C.lime; ctx.fill();
+    T('TU TRANSFORMACIÓN EMPIEZA HOY  →', CX, 899, 34, C.ink, { weight: 800 });
+    ctx.restore();
+  }
+  // fundido final
+  const fo = seg(t, 2.2, 2.5);
+  if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// ============================================================
+//  SECUENCIADOR + TRANSICIONES + POST
+// ============================================================
+const SCENES = [
+  { a: 0, b: 3.5, fn: sIntro, name: '01 — INTRO' },
+  { a: 3.5, b: 8, fn: sKinetic, name: '02 — MENTALIDAD' },
+  { a: 8, b: 12.5, fn: sNutri, name: '03 — NUTRICIÓN' },
+  { a: 12.5, b: 17, fn: sParticles, name: '04 — TRANSFORMACIÓN' },
+  { a: 17, b: 21, fn: sTunnel, name: '05 — RENDIMIENTO' },
+  { a: 21, b: 25, fn: sPlatforms, name: '06 — CONTENIDO' },
+  { a: 25, b: 27.5, fn: sMontage, name: '07 — HÁBITOS' },
+  { a: 27.5, b: 30.01, fn: sOutro, name: '08 — PABLO' },
+];
+const HITS = [1.0, 3.5, 4.75, 6.0, 7.25, 7.5, 8, 12.5, 13.4, 14.95, 17, 21, 25, 25.5, 26, 26.5, 27, 27.5];
+function env(t, list, k = 7) { let e = 0; for (const h of list) if (t >= h) e = Math.max(e, Math.exp(-(t - h) * k)); return e; }
+function drawScene(i, t) { const S = SCENES[i]; ctx.save(); S.fn(t - S.a); ctx.restore(); }
+
+function render(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  let i = SCENES.findIndex(s => t >= s.a && t < s.b); if (i < 0) i = SCENES.length - 1;
+  // zoom punch antes de los flashes
+  let z = 1;
+  for (const f of [8, 27.5]) { const k = seg(t, f - 0.25, f); if (k > 0 && k < 1) z = 1 + eInExpo(k) * 0.55; }
+  ctx.save();
+  if (z !== 1) { ctx.translate(CX, CY); ctx.scale(z, z); ctx.translate(-CX, -CY); }
+  if (i === 5 && t < 21.9) drawScene(4, t); // columnas entran sobre el túnel
+  if (i === 6 && t < 25.25) drawScene(5, t);
+  drawScene(i, t);
+  // iris: nutrición -> partículas desde el centro del donut
+  if (t >= 12.0 && t < 12.5) {
+    const k = eInOutExpo(seg(t, 12.0, 12.5)), r = k * 2300;
+    ctx.save(); circ(DX, DY, r); ctx.clip(); drawScene(3, t); ctx.restore();
+    ctx.strokeStyle = C.lime; ctx.lineWidth = 14 * (1 - k) + 2; circ(DX, DY, r); ctx.stroke();
+  }
+  ctx.restore();
+
+  // slices 3.5
+  slices(t, 3.5, 0.42, [C.lime, C.white, '#1a1a1c']);
+  // flashes
+  for (const f of [8, 27.5]) { const k = seg(t, f, f + 0.35); if (t >= f && k < 1) { ctx.fillStyle = `rgba(255,255,255,${Math.pow(1 - k, 2)})`; ctx.fillRect(0, 0, W, H); } }
+  // glitch 17
+  const gi = Math.max(0, 1 - Math.abs(t - 17) / 0.28);
+  if (gi > 0) glitch(gi, t);
+  // glitch pequeño al salir de las plataformas
+  const gi2 = Math.max(0, 1 - Math.abs(t - 25) / 0.12);
+  if (gi2 > 0) glitch(gi2 * 0.6, t);
+
+  // ---- composición final ----
+  const e = env(t, HITS, 8);
+  const ca = 2 + e * 14 + gi * 26;
+  const shake = e * 12 + gi * 10;
+  const sx = Math.sin(t * 93.1) * shake, sy = Math.cos(t * 71.7) * shake;
+  out.setTransform(1, 0, 0, 1, 0, 0); out.globalCompositeOperation = 'source-over'; out.globalAlpha = 1;
+  out.fillStyle = '#000'; out.fillRect(0, 0, W, H);
+  const sc = 1 + (shake > 0.5 ? 0.02 : 0);
+  out.save(); out.translate(CX + sx, CY + sy); out.scale(sc, sc); out.translate(-CX, -CY);
+  if (ca > 2.5) chroma(ca); else out.drawImage(buf, 0, 0);
+  out.restore();
+  // grano + viñeta
+  out.globalCompositeOperation = 'overlay'; out.globalAlpha = 0.09;
+  out.imageSmoothingEnabled = false; out.drawImage(GRAIN[Math.floor(t * 30) % 6], 0, 0, W, H); out.imageSmoothingEnabled = true;
+  out.globalAlpha = 1; out.globalCompositeOperation = 'source-over'; out.drawImage(VIG, 0, 0);
+  hud(t, i);
+}
+function slices(t, at, d, cols) {
+  const n = 9;
+  for (let b = 0; b < n; b++) {
+    const st = at - d + b * 0.018, p = seg(t, st, st + d) + seg(t, at + b * 0.018, at + b * 0.018 + d);
+    if (p <= 0 || p >= 2) continue;
+    const x = p < 1 ? lerp(-W, 0, eInOutExpo(p)) : lerp(0, W, eInOutExpo(p - 1));
+    ctx.fillStyle = cols[b % cols.length]; ctx.fillRect(x, b * H / n, W, H / n + 1);
+  }
+}
+function glitch(k, t) {
+  tctx.drawImage(buf, 0, 0);
+  const r = rng(Math.floor(t * 20) * 31 + 7);
+  for (let b = 0; b < 18; b++) {
+    const y = r() * H, h = 8 + r() * 120 * k, dx = (r() - 0.5) * 380 * k;
+    ctx.drawImage(tmp, 0, y, W, h, dx, y, W, h);
+  }
+  for (let b = 0; b < 6; b++) { ctx.fillStyle = r() < 0.5 ? C.lime : C.white; ctx.globalAlpha = 0.8 * k; ctx.fillRect(r() * W, r() * H, 40 + r() * 400 * k, 4 + r() * 18); }
+  ctx.globalAlpha = 1;
+}
+function chroma(a) {
+  out.globalCompositeOperation = 'lighter';
+  [['#ff0000', -a], ['#00ff00', 0], ['#0000ff', a]].forEach(([c, dx]) => {
+    t2.globalCompositeOperation = 'source-over'; t2.drawImage(buf, 0, 0);
+    t2.globalCompositeOperation = 'multiply'; t2.fillStyle = c; t2.fillRect(0, 0, W, H);
+    out.drawImage(tmp2, dx, 0);
+  });
+  out.globalCompositeOperation = 'source-over';
+}
+function hud(t, i) {
+  const a = seg(t, 2.6, 3.0) * (1 - seg(t, 27.3, 27.5)) * 0.85;
+  if (a <= 0) return;
+  out.save(); out.globalCompositeOperation = 'difference'; out.globalAlpha = a; out.fillStyle = '#fff';
+  out.font = MONO(17); out.letterSpacing = '3px'; out.textBaseline = 'middle';
+  out.textAlign = 'left'; out.fillText('PABLO ® MOTION REEL', 56, 52);
+  out.fillText(SCENES[i].name, 56, H - 52);
+  const fr = Math.floor(t * 60) % 60, s = Math.floor(t);
+  out.textAlign = 'right'; out.fillText(`00:00:${String(s).padStart(2, '0')}:${String(fr).padStart(2, '0')}`, W - 56, 52);
+  out.fillRect(W - 256, H - 54, 200 * (t / DUR), 4); out.globalAlpha = a * 0.35; out.fillRect(W - 256, H - 54, 200, 4);
+  out.restore();
+}
+
+window.ready = (async () => { await document.fonts.ready; precompute(); render(0); return true; })();
+window.frame = (t, q = 0.94) => { render(t); return cv.toDataURL('image/jpeg', q); };
+window.DUR = DUR;
+</script></body></html>
