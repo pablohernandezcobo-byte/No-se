@@ -15,6 +15,11 @@ def sweep_noise(d, f0, f1, shape):
         a, b = i * len(t) // c, (i + 1) * len(t) // c; fc = f0 * (f1 / f0) ** (i / c)
         out[a:b] = filt(n, lo=fc * 0.5, hi=fc * 2)[a:b]
     return out * shape(t / d)
+def typing(n=9, gap=0.036):
+    out = np.zeros(int(SR * (n * gap + 0.05)))
+    for k in range(n):
+        t = t_(0.03); c = filt(noise(len(t)), lo=1800, hi=7000) * np.exp(-t * 250); i = int(SR * k * gap); out[i:i + len(c)] += c
+    return out
 S = {
   'whoosh':    lambda: sweep_noise(0.42, 400, 5000, lambda k: np.sin(np.pi * k) ** 2) * 1.2,
   'whoosh_up': lambda: sweep_noise(0.6, 200, 4000, lambda k: k ** 2 * (1 - k ** 8)),
@@ -30,9 +35,14 @@ S = {
   'glitch':    lambda: (lambda t: (np.sign(np.sin(2 * np.pi * 220 * t * (1 + 3 * (np.floor(t * 60) % 3)))) * 0.4 + filt(noise(len(t)), lo=500) * 0.5) * (np.floor(t * 50) % 2) * np.exp(-t * 6))(t_(0.35)),
   'glitch_tr': lambda: (lambda t: (np.sign(np.sin(2 * np.pi * 110 * t * (1 + 4 * (np.floor(t * 40) % 4)))) * 0.5 + filt(noise(len(t)), lo=300) * 0.6) * (np.floor(t * 35) % 2) * np.sin(np.pi * t / 0.45))(t_(0.45)),
   'riser':     lambda: sweep_noise(0.75, 300, 6000, lambda k: k ** 2.5) * 0.7,
+  'swish':     lambda: sweep_noise(0.28, 900, 7000, lambda k: np.sin(np.pi * k) ** 2) * 0.9,
+  'drop':      lambda: sweep_noise(0.35, 5000, 600, lambda k: np.sin(np.pi * k) ** 2) * 0.8 + np.pad((lambda t: np.sin(2 * np.pi * np.cumsum(90 + 80 * np.exp(-t * 30)) / SR) * np.exp(-t * 18))(t_(0.2)), (int(SR * 0.15), 0))[:int(SR * 0.35)],
+  'rise':      lambda: sweep_noise(0.35, 500, 6000, lambda k: np.sin(np.pi * k * 0.9) ** 2) * 0.8,
+  'typing':    lambda: typing(),
+  'scratch':   lambda: (lambda t: filt(noise(len(t)), lo=2000, hi=8000) * (0.6 + 0.4 * np.sin(2 * np.pi * 38 * t)) * np.sin(np.pi * t / 0.25) ** 0.7)(t_(0.25)),
   'tap':       lambda: (lambda t: np.sin(2 * np.pi * np.cumsum(900 - 500 * t / 0.08) / SR) * np.exp(-t * 60) + 0.5 * filt(noise(len(t)), lo=3000) * np.exp(-t * 300))(t_(0.12)),
 }
-GAIN = {'whoosh': .55, 'whoosh_up': .5, 'impact': .7, 'boom': .9, 'shock': .35, 'thud': .45, 'pop': .35, 'tick': .25, 'type': .18,
+GAIN = {'swish': .4, 'drop': .45, 'rise': .4, 'typing': .2, 'scratch': .45, 'whoosh': .55, 'whoosh_up': .5, 'impact': .7, 'boom': .9, 'shock': .35, 'thud': .45, 'pop': .35, 'tick': .25, 'type': .18,
         'swipe': .35, 'shine': .12, 'glitch': .22, 'glitch_tr': .4, 'riser': .3, 'tap': .45}
 pan = 0
 for e in d['events']:
@@ -40,7 +50,7 @@ for e in d['events']:
     i = int(e['t'] * SR)
     if i < 0 or i >= N: continue
     sig = sig[:N - i]; pan = -pan if pan else 0.35
-    p = pan if e['type'] in ('whoosh', 'swipe', 'pop', 'tick', 'type') else 0
+    p = pan if e['type'] in ('whoosh', 'swipe', 'pop', 'tick', 'type', 'swish') else 0
     mix[i:i + len(sig), 0] += sig * np.sqrt(0.5 * (1 - p)); mix[i:i + len(sig), 1] += sig * np.sqrt(0.5 * (1 + p))
 # reverb corta para cohesión
 ir_t = t_(0.9); ir = noise(len(ir_t)) * np.exp(-ir_t * 7); ir[0] = 0; L = N + len(ir)

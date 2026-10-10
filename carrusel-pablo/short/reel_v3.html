@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Reel 5 claves v3</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="personaje.js"></script>
+<script src="poses.js"></script>
+<style>html,body{margin:0;background:#000}canvas{display:block}</style>
+</head><body><canvas id="c"></canvas>
+<script>
+// ============================================================
+//  @pablohentrenador · 5 CLAVES · Reel TURBO 9:16
+//  Texto cinético + 6 tipos de transición + eventos de sonido (window.EVENTS)
+// ============================================================
+const W = 1080, H = 1920, CX = W / 2;
+const BPM = 100, BEAT = 60 / BPM;
+const SEGS = [5, 8, 8, 8, 8, 8, 8];
+const STARTS = []; { let a = 0; for (const b of SEGS) { STARTS.push(a * BEAT); a += b; } STARTS.push(a * BEAT); }
+const DUR = STARTS[STARTS.length - 1];
+const BG = '#02040C', BLUE = '#2F6BFF', BLUE2 = '#4D8DFF', CYAN = '#5EC8FF', MUTED = 'rgba(255,255,255,0.74)';
+
+const cv = document.getElementById('c'); cv.width = W; cv.height = H;
+const out = cv.getContext('2d');
+const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
+const buf = mk(), ctx = buf.getContext('2d');
+const tA = mk(), aC = tA.getContext('2d'), tB = mk(), bC = tB.getContext('2d'), tC = mk(), cC = tC.getContext('2d');
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutExpo = x => x >= 1 ? 1 : 1 - Math.pow(2, -10 * x);
+const eInExpo = x => x <= 0 ? 0 : Math.pow(2, 10 * x - 10);
+const eInOutCubic = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const eInOutExpo = x => x <= 0 ? 0 : x >= 1 ? 1 : x < .5 ? Math.pow(2, 20 * x - 10) / 2 : (2 - Math.pow(2, -20 * x + 10)) / 2;
+const eOutBack = x => { const c1 = 2.2, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const P = (s, w = 900) => `${w} ${s}px Poppins`;
+function T(str, x, y, size, color, o = {}) {
+  const { weight = 900, align = 'center', alpha = 1, stroke = 0 } = o;
+  ctx.save(); ctx.font = P(size, weight); ctx.textAlign = align; ctx.letterSpacing = '0px'; ctx.globalAlpha *= alpha;
+  if (stroke) { ctx.lineWidth = stroke; ctx.strokeStyle = color; ctx.strokeText(str, x, y); } else { ctx.fillStyle = color; ctx.fillText(str, x, y); }
+  ctx.restore();
+}
+function mw(str, size, weight = 900) { ctx.save(); ctx.font = P(size, weight); ctx.letterSpacing = '0px'; const w = ctx.measureText(str).width; ctx.restore(); return w; }
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function circ(x, y, r) { ctx.beginPath(); ctx.arc(x, y, Math.max(0, r), 0, Math.PI * 2); }
+const GLY = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&@$';
+function scramble(str, k, t, seed = 1) {
+  const r = rng(Math.floor(t * 24) * 7 + seed);
+  return [...str].map((c, i) => (c === ' ' || k >= (i + 1) / str.length) ? c : GLY[Math.floor(r() * GLY.length)]).join('');
+}
+
+// ---------- registro de eventos de sonido ----------
+const EVENTS = [];
+const ev = (t, type, g = 1) => EVENTS.push({ t: +t.toFixed(3), type, g });
+
+// ---------- efectos de texto ----------
+// palabras que golpean: escala grande → 1, con estela azul
+function slam(str, x, y, size, color, lt, t0, o = {}) {
+  const { stagger = 0.09, align = 'left', weight = 900, from = 2.0 } = o;
+  const parts = str.split(' '), sp = mw(' ', size, weight), ws = parts.map(p => mw(p, size, weight));
+  const total = ws.reduce((a, b) => a + b, 0) + sp * (parts.length - 1);
+  let xx = align === 'center' ? x - total / 2 : x;
+  parts.forEach((p, i) => {
+    const k = seg(lt, t0 + i * stagger, t0 + i * stagger + 0.32);
+    if (k > 0) {
+      const e = eOutExpo(k), s = lerp(from, 1, e), cx = xx + ws[i] / 2;
+      for (let g = 3; g >= 1; g--) { if (k >= 1) break; const sg = lerp(from, 1, eOutExpo(Math.max(0, k - g * 0.08))); ctx.save(); ctx.translate(cx, y - size * 0.35); ctx.scale(sg, sg); ctx.globalAlpha = 0.18 * (1 - k); T(p, 0, size * 0.35, size, BLUE2, { weight }); ctx.restore(); }
+      ctx.save(); ctx.translate(cx, y - size * 0.35); ctx.scale(s, s); ctx.rotate((1 - e) * (i % 2 ? 0.08 : -0.08)); ctx.globalAlpha = Math.min(1, k * 3);
+      T(p, 0, size * 0.35, size, color, { weight }); ctx.restore();
+    }
+    xx += ws[i] + sp;
+  });
+  return total;
+}
+// animText: entra desde izquierda/derecha/arriba/abajo, aparece letra a letra, crece, se escribe o sube desde máscara
+function animText(str, x, y, size, color, lt, t0, mode, o = {}) {
+  const { weight = 900, align = 'left', dur = 0.55 } = o;
+  const k = seg(lt, t0, t0 + dur), e = eOutExpo(k);
+  if (k <= 0) return;
+  const w = mw(str, size, weight), x0 = align === 'center' ? x - w / 2 : x;
+  ctx.save();
+  if (mode === 'left' || mode === 'right') { ctx.translate((1 - e) * (mode === 'left' ? -(x0 + w + 60) : W - x0 + 60), 0); T(str, x0, y, size, color, { weight, align: 'left' }); }
+  else if (mode === 'top' || mode === 'bottom') { ctx.globalAlpha = Math.min(1, k * 2.5); ctx.translate(0, (1 - e) * (mode === 'top' ? -260 : 260)); T(str, x0, y, size, color, { weight, align: 'left' }); }
+  else if (mode === 'fade') { let xx = x0; const n = str.length; [...str].forEach((c, i) => { const kc = seg(lt, t0 + i * 0.035, t0 + i * 0.035 + 0.35); ctx.save(); ctx.globalAlpha = kc; ctx.translate(0, (1 - kc) * 12); T(c, xx, y, size, color, { weight, align: 'left' }); ctx.restore(); xx += mw(c, size, weight); }); }
+  else if (mode === 'scale') { const s2 = lerp(0.25, 1, eOutBack(k)); ctx.globalAlpha = Math.min(1, k * 2); ctx.translate(x0 + w / 2, y - size * 0.35); ctx.scale(s2, s2); T(str, 0, size * 0.35, size, color, { weight }); }
+  else if (mode === 'type') { const nn = Math.floor(clamp((lt - t0) * 28, 0, str.length)); T(str.slice(0, nn), x0, y, size, color, { weight, align: 'left' }); if (nn < str.length || Math.floor(lt * 3) % 2 === 0) { ctx.fillStyle = CYAN; ctx.fillRect(x0 + mw(str.slice(0, nn), size, weight) + 6, y - size * 0.75, 8, size * 0.85); } }
+  else if (mode === 'mask') { ctx.beginPath(); ctx.rect(0, y - size * 0.95, W, size * 1.2); ctx.clip(); T(str, x0, y + (1 - e) * size * 1.15, size, color, { weight, align: 'left' }); }
+  ctx.restore();
+}
+// párrafo con estilos de entrada: 'fade' palabra a palabra · 'up' líneas que suben · 'left' líneas desde la izquierda
+function para(parts, x, y, maxW, size, lh, lt, t0, mode) {
+  const toks = []; parts.forEach(([s, b]) => s.split(' ').filter(Boolean).forEach(w => toks.push([w, b])));
+  const lines = [[]]; let lw = 0;
+  toks.forEach(tk => { const w = mw(tk[0] + ' ', size, tk[1] ? 700 : 500); if (lw + w > maxW && lines[lines.length - 1].length) { lines.push([]); lw = 0; } lines[lines.length - 1].push(tk); lw += w; });
+  let wi = 0;
+  lines.forEach((ln, i) => {
+    let xx = x;
+    const kl = eOutExpo(seg(lt, t0 + i * 0.16, t0 + i * 0.16 + 0.5));
+    ln.forEach(([w, b]) => {
+      const ww = mw(w + ' ', size, b ? 700 : 500);
+      let a = 1, dx = 0, dy = 0;
+      if (mode === 'fade') { a = seg(lt, t0 + wi * 0.045, t0 + wi * 0.045 + 0.4); }
+      else if (mode === 'up') { a = kl; dy = (1 - kl) * 50; }
+      else { a = kl; dx = (1 - kl) * -140; }
+      if (a > 0) { ctx.save(); ctx.globalAlpha = a; ctx.translate(dx, dy); T(w, xx, y + i * lh, size, b ? '#fff' : MUTED, { weight: b ? 700 : 500, align: 'left' }); ctx.restore(); }
+      xx += ww; wi++;
+    });
+  });
+}
+// línea con barra de rotulador que barre por detrás
+function marker(str, x, y, size, lt, t0) {
+  const w = mw(str, size), k = eInOutExpo(seg(lt, t0, t0 + 0.35));
+  if (k <= 0) return;
+  ctx.save(); ctx.fillStyle = BLUE; ctx.beginPath(); ctx.moveTo(x - 14, y - size * 0.82); ctx.lineTo(x - 14 + (w + 34) * k, y - size * 0.82); ctx.lineTo(x - 22 + (w + 34) * k, y + size * 0.16); ctx.lineTo(x - 22, y + size * 0.16); ctx.fill();
+  ctx.beginPath(); ctx.rect(x - 30, y - size, (w + 60) * k, size * 1.3); ctx.clip();
+  T(str, x, y, size, '#fff', { align: 'left' }); ctx.restore();
+}
+// párrafo: líneas que entran desde la izquierda; palabras destacadas subrayadas en cian
+function rich(parts, x, y, maxW, size, lh, lt, t0) {
+  const toks = []; parts.forEach(([s, b]) => s.split(' ').filter(Boolean).forEach(w => toks.push([w, b])));
+  const lines = [[]]; let lw = 0;
+  toks.forEach(tk => { const w = mw(tk[0] + ' ', size, tk[1] ? 700 : 500); if (lw + w > maxW && lines[lines.length - 1].length) { lines.push([]); lw = 0; } lines[lines.length - 1].push(tk); lw += w; });
+  lines.forEach((ln, i) => {
+    const k = eOutExpo(seg(lt, t0 + i * 0.13, t0 + i * 0.13 + 0.4)); if (k <= 0) return;
+    let xx = x; ctx.save(); ctx.globalAlpha = k; ctx.translate((1 - k) * -120, 0);
+    ln.forEach(([w, b]) => {
+      const ww = mw(w + ' ', size, b ? 700 : 500);
+      if (b) { const ku = eOutExpo(seg(lt, t0 + i * 0.13 + 0.3, t0 + i * 0.13 + 0.6)); ctx.fillStyle = CYAN; ctx.fillRect(xx, y + i * lh + 10, (ww - 12) * ku, 5); }
+      T(w, xx, y + i * lh, size, b ? '#fff' : MUTED, { weight: b ? 700 : 500, align: 'left' }); xx += ww;
+    });
+    ctx.restore();
+  });
+  return lines.length;
+}
+
+// ---------- fondo, foto, personaje ----------
+let IMG; const PIM = {}, CH = {};
+const beatEnv = t => 0;
+function background(t, glowY = 0.62, strength = 1) {
+  ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+  const pulse = beatEnv(t);
+  const g = ctx.createRadialGradient(CX, H * glowY, 0, CX, H * glowY, 760);
+  g.addColorStop(0, `rgba(47,107,255,${(0.32 + 0.14 * pulse) * strength})`); g.addColorStop(0.55, `rgba(47,107,255,${0.08 * strength})`); g.addColorStop(1, 'rgba(47,107,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const r = rng(12);
+  for (let i = 0; i < 70; i++) { const x = r() * W, sp = 30 + r() * 90, y = (r() * H - t * sp + H * 4) % H, s = 1 + r() * 2.5; ctx.fillStyle = `rgba(94,200,255,${0.15 + r() * 0.35})`; circ(x, y, s); ctx.fill(); }
+}
+function character(x, y, w, alpha = 1) {
+  const h = Math.round(w * IMG.height / IMG.width);
+  if (!CH[w]) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h; const g2 = c.getContext('2d');
+    g2.drawImage(IMG, 0, 0, w, h); g2.globalCompositeOperation = 'destination-in';
+    const gv = g2.createLinearGradient(0, 0, 0, h); gv.addColorStop(0, 'rgba(0,0,0,0)'); gv.addColorStop(0.32, '#000'); gv.addColorStop(0.88, '#000'); gv.addColorStop(1, 'rgba(0,0,0,0)'); g2.fillStyle = gv; g2.fillRect(0, 0, w, h);
+    const gh = g2.createLinearGradient(0, 0, w, 0); gh.addColorStop(0, 'rgba(0,0,0,0)'); gh.addColorStop(0.12, '#000'); gh.addColorStop(0.88, '#000'); gh.addColorStop(1, 'rgba(0,0,0,0)'); g2.fillStyle = gh; g2.fillRect(0, 0, w, h); CH[w] = c;
+  }
+  ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(CH[w], x - w / 2, y); ctx.restore();
+}
+function photo(name, y0, h, lt, focus = 0.2, dir = 1, punch = 0) {
+  const img = PIM[name], s0 = Math.max(W / img.width, h / img.height);
+  const z = s0 * (1.16 - 0.12 * Math.min(1, lt / 4)) * (1 + 0.06 * punch);
+  const dw = img.width * z, dh = img.height * z, x = CX - dw / 2 + dir * 26 * Math.min(1, lt / 4), y = y0 - (dh - h) * focus;
+  ctx.save(); ctx.beginPath(); ctx.rect(0, y0, W, h); ctx.clip(); ctx.drawImage(img, x, y, dw, dh);
+  const g = ctx.createLinearGradient(0, y0, 0, y0 + h); g.addColorStop(0, 'rgba(2,4,12,0.6)'); g.addColorStop(0.2, 'rgba(2,4,12,0)'); g.addColorStop(0.6, 'rgba(2,4,12,0)'); g.addColorStop(1, 'rgba(2,4,12,1)');
+  ctx.fillStyle = g; ctx.fillRect(0, y0, W, h); ctx.restore();
+}
+function handle(y, k = 1, x0 = 64) {
+  if (k <= 0) return;
+  ctx.save(); ctx.globalAlpha = k; ctx.translate((1 - k) * -60, 0);
+  ctx.save(); circ(x0 + 34, y, 34); ctx.clip(); ctx.drawImage(IMG, 380, 545, 300, 300, x0, y - 34, 68, 68); ctx.restore();
+  ctx.strokeStyle = BLUE; ctx.lineWidth = 4; circ(x0 + 34, y, 34); ctx.stroke();
+  T('@pablohentrenador', x0 + 84, y + 12, 34, '#fff', { weight: 600, align: 'left' });
+  ctx.restore();
+}
+
+// ---------- escenas ----------
+const TIPS = [
+  { t: ['CALIENTA CON SERIES', 'DE APROXIMACIÓN'], k: '2–3 SERIES', ks: 'LIGERAS, SUBIENDO EL PESO', img: 'mancuernas', f: 0.2, p: [['Además de calentar,'], ['te van a ayudar a mejorar mucho tu rendimiento:', 1], ['llegas a tus series fuertes con más fuerza.']] },
+  { t: ['DESCANSA DE VERDAD', 'ENTRE SERIES'], k: '2–3 MIN', ks: 'EN LOS EJERCICIOS GRANDES', img: 'selfie', f: 0.0, p: [['Si descansas poco,'], ['levantas menos peso y haces menos repeticiones.', 1], ['Y eso es progresar menos.']] },
+  { t: ['USA EL RECORRIDO', 'COMPLETO'], k: 'RANGO COMPLETO', ks: 'Y BAJADA CONTROLADA', img: 'sentadilla', f: 0.45, p: [['Medias repeticiones, medio resultado.'], ['Baja controlando y estira el músculo:', 1], ['ahí está gran parte del estímulo.']] },
+  { t: ['MUÉVETE', 'FUERA DEL GYM'], k: '8.000–10.000', ks: 'PASOS AL DÍA', img: 'mochila', f: 0.1, p: [['Una hora de entreno no compensa 23 horas sentado.'], ['Caminar es clave para perder grasa.', 1]] },
+  { t: ['LA CREATINA', 'FUNCIONA'], k: '3–5 G / DÍA', ks: 'MONOHIDRATO, TODOS LOS DÍAS', img: 'press_banca', f: 0.15, p: [['El suplemento con'], ['más evidencia para ganar fuerza y músculo.', 1], ['También los días de descanso.']] },
+];
+const TL = { badge: 0.12, t1: 0.3, t2: 0.55, num: 0.5, key: 0.9, old: 1.0, strike: 1.45, cover: 1.75, par: 1.95 };
+const OLD = ['15 MIN DE CINTA', '30 SEGUNDOS', 'MEDIAS REPES', 'SOLO EL GYM', 'MIL SUPLEMENTOS'];
+const TMODE = [['left', 'right'], ['top', 'bottom'], ['fade', 'scale'], ['right', 'left'], ['type', 'mask']];
+const PMODE = ['fade', 'up', 'left', 'fade', 'up'];
+
+function sCover(lt, t) {
+  background(t, 0.66);
+  const kc = eOutExpo(seg(lt, 0.05, 0.9)), z = lerp(1.25, 1, kc) + lt * 0.012;
+  ctx.save(); ctx.translate(CX, 1920); ctx.scale(z, z); ctx.translate(-CX, -1920);
+  character(CX, 520 + (1 - kc) * 260, 1180, kc); ctx.restore();
+  // "5" con onda expansiva
+  const k5 = seg(lt, 0.35, 0.6), w5 = mw('5', 196), wc = mw(' CLAVES', 196), x0 = CX - (w5 + wc) / 2;
+  if (k5 > 0) {
+    const s = lerp(4, 1, eOutExpo(k5));
+    ctx.save(); ctx.translate(x0 + w5 / 2, 262); ctx.scale(s, s); ctx.rotate((1 - eOutExpo(k5)) * -0.3); ctx.globalAlpha = Math.min(1, k5 * 3); T('5', 0, 68, 196, BLUE2); ctx.restore();
+    const kw = seg(lt, 0.5, 1.1); if (kw > 0 && kw < 1) { ctx.strokeStyle = `rgba(94,200,255,${1 - kw})`; ctx.lineWidth = 10 * (1 - kw) + 1; circ(x0 + w5 / 2, 262, 60 + kw * 700); ctx.stroke(); }
+  }
+  // CLAVES letra a letra cayendo
+  let xx = x0 + w5 + mw(' ', 196);
+  [...'CLAVES'].forEach((ch, i) => { const k = seg(lt, 0.55 + i * 0.05, 0.85 + i * 0.05); if (k > 0) { const e = eOutBack(k); ctx.save(); ctx.globalAlpha = Math.min(1, k * 4); T(ch, xx, 330 - (1 - e) * 160, 196, '#fff', { align: 'left' }); ctx.restore(); } xx += mw(ch, 196); });
+  // subtítulo máquina de escribir
+  const sub1 = 'QUE VAN A ACELERAR TUS', sub2 = 'RESULTADOS EN EL GIMNASIO';
+  const n1 = Math.floor(clamp((lt - 0.95) * 45, 0, sub1.length)), n2 = Math.floor(clamp((lt - 0.95 - sub1.length / 45) * 45, 0, sub2.length));
+  if (n1 > 0) T(sub1.slice(0, n1), CX, 430, 58, '#fff', { weight: 800 });
+  if (n2 > 0) T(sub2.slice(0, n2), CX, 500, 58, '#fff', { weight: 800 });
+  // insignia con glitch
+  const kb = seg(lt, 2.0, 2.45);
+  if (kb > 0) { const s = eOutBack(Math.min(1, kb * 1.5)); ctx.save(); ctx.translate(CX + (kb < 0.6 ? (rng(Math.floor(t * 30))() - 0.5) * 30 : 0), 590); ctx.scale(s, s); rr(-260, -36, 520, 64, 32); ctx.fillStyle = BLUE; ctx.fill(); T(scramble('LA 5 ES LA MÁS IGNORADA', kb * 1.3, t, 3), 0, 10, 28, '#fff', { weight: 800 }); ctx.restore(); }
+  handle(700, eOutExpo(seg(lt, 2.2, 2.6)), CX - 240);
+}
+function sTip(i, lt, t) {
+  background(t, 0.75, 0.6);
+  const tip = TIPS[i];
+  const kr = eInOutExpo(seg(lt, -0.25, 0.35));
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 1180 * (1 - kr), W, 1180); ctx.clip();
+  photo(tip.img, 0, 1180, lt, tip.f, i % 2 ? -1 : 1, 0); ctx.restore();
+  for (let k = 0; k < 5; k++) { ctx.fillStyle = 'rgba(255,255,255,0.25)'; rr(60 + k * 196, 60, 180, 8, 4); ctx.fill(); ctx.fillStyle = '#fff'; rr(60 + k * 196, 60, 180 * (k < i ? 1 : k > i ? 0 : seg(lt, 0, SEGS[i + 1] * BEAT)), 8, 4); ctx.fill(); }
+  handle(140, eOutExpo(seg(lt, 0.05, 0.4)));
+  // insignia: alterna entrada lateral / caída desde arriba
+  const kb = eOutExpo(seg(lt, TL.badge, TL.badge + 0.45));
+  if (kb > 0) { ctx.save(); if (i % 2) ctx.translate(0, (1 - kb) * -200); else ctx.translate((1 - kb) * -500, 0); ctx.globalAlpha = Math.min(1, kb * 2); ctx.translate(64, 250); rr(0, -44, 380, 72, 36); ctx.fillStyle = BLUE; ctx.fill(); circ(38, -8, 26); ctx.fillStyle = '#fff'; ctx.fill(); T(String(i + 1), 38, 4, 32, BG); T(`CLAVE ${i + 1} DE 5`, 80, 4, 32, '#fff', { weight: 800, align: 'left' }); ctx.restore(); }
+  // número grande: aparece suave desde la derecha
+  const kn = eOutExpo(seg(lt, TL.num, TL.num + 0.7));
+  if (kn > 0) T('0' + (i + 1), W - 50 + (1 - kn) * 260, 1150, 260, `rgba(77,141,255,${0.6 * kn})`, { align: 'right', stroke: 4 });
+  // dato: primero el error, se tacha, y un panel azul lo tapa con la respuesta correcta
+  const kw = Math.max(mw(tip.k, 72), mw(OLD[i], 60), mw(tip.ks, 26, 600)) + 70;
+  const kbx = eInOutExpo(seg(lt, TL.key, TL.key + 0.3));
+  if (kbx > 0) {
+    rr(64, 1000, kw * kbx, 150, 28); ctx.fillStyle = 'rgba(2,4,12,0.86)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.save(); ctx.beginPath(); ctx.roundRect(64, 1000, kw * kbx, 150, 28); ctx.clip();
+    const ko = seg(lt, TL.old, TL.old + 0.4);
+    T(OLD[i], 99, 1094, 60, 'rgba(255,255,255,0.6)', { align: 'left', alpha: ko });
+    const kst = eInOutExpo(seg(lt, TL.strike, TL.strike + 0.25)); if (kst > 0) { ctx.fillStyle = '#FF4D5E'; ctx.fillRect(92, 1068, (mw(OLD[i], 60) + 14) * kst, 9); }
+    const kc = eInOutExpo(seg(lt, TL.cover, TL.cover + 0.35));
+    if (kc > 0) {
+      const px = 64 + kw * (1 - kc);
+      ctx.fillStyle = BLUE; ctx.fillRect(px, 1000, kw, 150);
+      ctx.beginPath(); ctx.rect(px, 1000, kw, 150); ctx.clip();
+      T(tip.k, 99 + (1 - kc) * 120, 1084, 72, '#fff', { align: 'left' });
+      T(tip.ks, 99 + (1 - kc) * 160, 1128, 26, 'rgba(255,255,255,0.85)', { weight: 600, align: 'left' });
+    }
+    ctx.restore();
+  }
+  // título con dos entradas distintas
+  const ts = Math.min(92, 92 * 950 / Math.max(mw(tip.t[0], 92), mw(tip.t[1], 92)));
+  animText(tip.t[0], 64, 1210 + ts, ts, '#fff', lt, TL.t1, TMODE[i][0], { dur: TMODE[i][0] === 'fade' ? 0.9 : 0.55 });
+  animText(tip.t[1], 64, 1210 + ts * 2.05, ts, BLUE2, lt, TL.t2, TMODE[i][1], { dur: 0.55 });
+  para(tip.p, 64, 1230 + ts * 2 + 100, 950, 40, 58, lt, TL.par, PMODE[i]);
+}
+function sCTA(lt, t) {
+  background(t, 0.7, 0.6);
+  const kr = eOutExpo(seg(lt, 0, 0.6));
+  ctx.save(); ctx.globalAlpha = eOutExpo(seg(lt, -0.25, 0.4)); photo('remo', 640, 1280, lt, 0.0, 1, Math.exp(-Math.max(0, lt) * 5)); ctx.restore();
+  const g = ctx.createLinearGradient(0, 640, 0, 900); g.addColorStop(0, 'rgba(2,4,12,1)'); g.addColorStop(1, 'rgba(2,4,12,0)'); ctx.fillStyle = g; ctx.fillRect(0, 640, W, 260);
+  animText('¿CUÁL VAS A', CX, 300, 110, '#fff', lt, 0.05, 'left', { align: 'center' });
+  animText('APLICAR HOY?', CX, 420, 110, BLUE2, lt, 0.3, 'right', { align: 'center' });
+  const kd = seg(lt, 0.8, 1.15);
+  if (kd > 0) {
+    const pulse = 1;
+    ctx.save(); ctx.globalAlpha = Math.min(1, kd * 2); ctx.translate(CX, 560 + (1 - eOutExpo(kd)) * 300); ctx.scale(pulse, pulse);
+    ctx.shadowColor = 'rgba(47,107,255,0.85)'; ctx.shadowBlur = 50; rr(-400, -56, 800, 112, 56); ctx.fillStyle = BLUE; ctx.fill(); ctx.shadowColor = 'transparent';
+    const w1 = mw('Escríbeme', 46, 800), w2 = mw('PLAN', 46) + 40, w3 = mw('por DM', 46, 800), tw = w1 + w2 + w3 + 48; let xx = -tw / 2;
+    T('Escríbeme', xx, 18, 46, '#fff', { weight: 800, align: 'left' }); xx += w1 + 24;
+    rr(xx, -36, w2, 72, 16); ctx.fillStyle = BG; ctx.fill(); T(scramble('PLAN', seg(lt, 1.0, 1.35), t, 5), xx + w2 / 2, 18, 46, '#fff'); xx += w2 + 24;
+    T('por DM', xx, 18, 46, '#fff', { weight: 800, align: 'left' });
+    ctx.restore();
+    // dedo que pulsa el botón
+    for (const tt of [1.6, 2.7]) { const k = seg(lt, tt, tt + 0.5); if (k > 0 && k < 1) { ctx.strokeStyle = `rgba(255,255,255,${1 - k})`; ctx.lineWidth = 5; circ(CX + 250, 575, 20 + k * 90); ctx.stroke(); ctx.fillStyle = `rgba(255,255,255,${0.6 * (1 - k)})`; circ(CX + 250, 575, 22); ctx.fill(); } }
+  }
+  const kn = seg(lt, 1.3, 1.7); if (kn > 0) T('y te preparo un entrenamiento hecho para ti', CX, 680, 36, MUTED, { weight: 600, alpha: kn });
+  handle(1500, eOutExpo(seg(lt, 1.9, 2.3)));
+}
+const SCENES = [(lt, t) => sCover(lt, t), ...TIPS.map((_, i) => (lt, t) => sTip(i, lt, t)), (lt, t) => sCTA(lt, t)];
+function drawScene(i, t) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; SCENES[i](t - STARTS[i], t); }
+
+// ---------- transiciones (una distinta en cada cambio) ----------
+const TRANS = ['zoom', 'whipX', 'glitch', 'iris', 'stripes', 'whipY'];
+const TW = 0.22;
+function transition(type, u, t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+  if (type === 'zoom') {
+    if (u < 0.5) { const k = eInExpo(u * 2); for (let g = 4; g >= 0; g--) { const s = 1 + k * (0.8 + g * 0.08); ctx.globalAlpha = g ? 0.15 * k : 1 - k * 0.6; ctx.save(); ctx.translate(CX, H / 2); ctx.scale(s, s); ctx.translate(-CX, -H / 2); ctx.drawImage(tA, 0, 0); ctx.restore(); } }
+    else { const k = eOutExpo((u - 0.5) * 2), s = lerp(0.6, 1, k); ctx.globalAlpha = k; ctx.save(); ctx.translate(CX, H / 2); ctx.scale(s, s); ctx.translate(-CX, -H / 2); ctx.drawImage(tB, 0, 0); ctx.restore(); }
+  } else if (type === 'whipX' || type === 'whipY') {
+    const s = eInOutCubic(u), blur = Math.sin(Math.PI * u) * 110, D = type === 'whipX' ? W : H, dx = type === 'whipX' ? 1 : 0, dy = 1 - dx;
+    [[tA, -s], [tB, 1 - s]].forEach(([img, o]) => { for (let g = 5; g >= 1; g--) { ctx.globalAlpha = 0.16; ctx.drawImage(img, (o * D - g * blur * 0.5) * dx, (o * D - g * blur * 0.5) * dy); } ctx.globalAlpha = 1; ctx.drawImage(img, o * D * dx, o * D * dy); });
+  } else if (type === 'glitch') {
+    const img = u < 0.5 ? tA : tB, k = 1 - Math.abs(u - 0.5) * 2;
+    ctx.drawImage(img, 0, 0);
+    const r = rng(Math.floor(t * 40) * 13 + 1);
+    for (let b = 0; b < 22; b++) { const y = r() * H, h = 10 + r() * 160 * k, dx = (r() - 0.5) * 420 * k; ctx.drawImage(img, 0, y, W, h, dx, y, W, h); }
+    for (let b = 0; b < 8; b++) { ctx.fillStyle = r() < 0.5 ? BLUE : CYAN; ctx.globalAlpha = 0.7 * k; ctx.fillRect(r() * W, r() * H, 80 + r() * 500 * k, 6 + r() * 24); }
+  } else if (type === 'iris') {
+    ctx.drawImage(tA, 0, 0); const k = eInOutCubic(u), rad = k * 1250;
+    ctx.save(); circ(CX, H / 2, rad); ctx.clip(); ctx.drawImage(tB, 0, 0); ctx.restore();
+    ctx.strokeStyle = CYAN; ctx.lineWidth = 16 * (1 - k) + 3; circ(CX, H / 2, rad); ctx.stroke();
+  } else if (type === 'stripes') {
+    ctx.drawImage(u < 0.5 ? tA : tB, 0, 0);
+    const n = 8, bw = H / n;
+    for (let b = 0; b < n; b++) {
+      const p = seg(u, b * 0.03, 0.5 + b * 0.03) + seg(u, 0.5 + b * 0.02, 0.9 + b * 0.02);
+      if (p <= 0 || p >= 2) continue;
+      const x = p < 1 ? lerp(-W - 300, 0, eInOutExpo(p)) : lerp(0, W + 300, eInOutExpo(p - 1));
+      ctx.fillStyle = b % 2 ? BLUE : CYAN; ctx.beginPath(); ctx.moveTo(x - 150, b * bw); ctx.lineTo(x + W + 150, b * bw); ctx.lineTo(x + W, (b + 1) * bw + 1); ctx.lineTo(x - 300, (b + 1) * bw + 1); ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- render ----------
+let GRAIN;
+function render(t) {
+  let i = STARTS.findIndex((s, k) => t >= s && t < STARTS[k + 1]); if (i < 0) i = SCENES.length - 1;
+  let j = -1; for (let k = 1; k < SCENES.length; k++) if (Math.abs(t - STARTS[k]) < TW) j = k;
+  if (j > 0) {
+    drawScene(j - 1, t); aC.drawImage(buf, 0, 0); drawScene(j, t); bC.drawImage(buf, 0, 0);
+    transition(TRANS[j - 1], seg(t, STARTS[j] - TW, STARTS[j] + TW), t);
+  } else drawScene(i, t);
+  const fo = seg(t, DUR - 0.35, DUR); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
+  // cámara: golpe en cada evento fuerte
+  const t5 = STARTS[0] + 0.35, hit = t >= t5 && t < t5 + 0.6 ? Math.exp(-(t - t5) * 9) : 0;
+  const z = 1 + 0.04 * hit, sh = 14 * hit, ca = 1 + 12 * hit;
+  out.setTransform(1, 0, 0, 1, 0, 0); out.globalCompositeOperation = 'source-over'; out.globalAlpha = 1; out.fillStyle = '#000'; out.fillRect(0, 0, W, H);
+  out.save(); out.translate(CX + Math.sin(t * 91) * sh, H / 2 + Math.cos(t * 73) * sh); out.scale(z, z); out.translate(-CX, -H / 2);
+  if (ca > 2) { out.globalCompositeOperation = 'lighter'; [['#ff0000', -ca], ['#00ff00', 0], ['#0000ff', ca]].forEach(([c, dx]) => { cC.globalCompositeOperation = 'source-over'; cC.drawImage(buf, 0, 0); cC.globalCompositeOperation = 'multiply'; cC.fillStyle = c; cC.fillRect(0, 0, W, H); out.drawImage(tC, dx, 0); }); out.globalCompositeOperation = 'source-over'; }
+  else out.drawImage(buf, 0, 0);
+  out.restore();
+  out.globalCompositeOperation = 'overlay'; out.globalAlpha = 0.05; out.drawImage(GRAIN[Math.floor(t * 30) % 4], 0, 0, W, H);
+  out.globalCompositeOperation = 'source-over'; out.globalAlpha = 1;
+}
+
+// ---------- lista de eventos de sonido (misma fuente de tiempos que las animaciones) ----------
+function buildEvents() {
+  const C = STARTS[0];
+  ev(C + 0.05, 'whoosh_up', 0.7); ev(C + 0.35, 'boom', 1); ev(C + 0.5, 'shock', 0.8);
+  for (let i = 0; i < 6; i++) ev(C + 0.55 + i * 0.05, 'tick', 0.5);
+  const s1 = 'QUE VAN A ACELERAR TUS'.length, s2 = 'RESULTADOS EN EL GIMNASIO'.length;
+  for (let k = 0; k < s1 + s2; k += 2) ev(C + 0.95 + k / 45, 'type', 0.35);
+  ev(C + 2.0, 'glitch', 0.5); ev(C + 2.2, 'swish', 0.5);
+  const MS = { left: 'swish', right: 'swish', top: 'drop', bottom: 'rise', fade: 'shine', scale: 'pop', type: 'typing', mask: 'swish' };
+  TIPS.forEach((tip, i) => {
+    const S = STARTS[i + 1];
+    ev(S + TL.badge, i % 2 ? 'drop' : 'swish', 0.6);
+    ev(S + TL.t1, MS[TMODE[i][0]], 0.8); ev(S + TL.t2, MS[TMODE[i][1]], 0.8);
+    ev(S + TL.key, 'swipe', 0.5); ev(S + TL.strike, 'scratch', 0.9); ev(S + TL.cover, 'swipe', 0.9); ev(S + TL.cover + 0.3, 'pop', 0.8);
+    ev(S + TL.par, PMODE[i] === 'fade' ? 'shine' : 'swish', 0.35);
+  });
+  for (let j = 1; j < SCENES.length; j++) {
+    const S = STARTS[j];
+    ev(S - 0.75, 'riser', 0.45); ev(S - TW, TRANS[j - 1] === 'glitch' ? 'glitch_tr' : 'whoosh', 1); ev(S, 'thud', 0.6);
+  }
+  const Z = STARTS[6];
+  ev(Z + 0.05, 'swish', 0.8); ev(Z + 0.3, 'swish', 0.8); ev(Z + 0.8, 'rise', 0.6); ev(Z + 1.0, 'glitch', 0.4);
+  ev(Z + 1.6, 'tap', 0.9); ev(Z + 2.7, 'tap', 0.9); ev(Z + 1.9, 'swish', 0.4); ev(DUR - 1.2, 'boom', 0.6);
+  EVENTS.sort((a, b) => a.t - b.t);
+}
+window.ready = (async () => {
+  IMG = new Image(); IMG.src = window.PERSONAJE; await IMG.decode();
+  for (const [k, v] of Object.entries(window.POSES)) { const im = new Image(); im.src = v; await im.decode(); PIM[k] = im; }
+  for (const w of [500, 600, 700, 800, 900]) await document.fonts.load(`${w} 50px Poppins`);
+  const r = rng(9); GRAIN = [];
+  for (let k = 0; k < 4; k++) { const c = document.createElement('canvas'); c.width = 540; c.height = 960; const g = c.getContext('2d'), im = g.createImageData(540, 960); for (let j = 0; j < im.data.length; j += 4) { const v = r() * 255; im.data[j] = im.data[j + 1] = im.data[j + 2] = v; im.data[j + 3] = 255; } g.putImageData(im, 0, 0); GRAIN.push(c); }
+  buildEvents(); render(0); return true;
+})();
+window.frame = (t, q = 0.95) => { render(t); return cv.toDataURL('image/jpeg', q); };
+window.DUR = DUR; window.EVENTS = EVENTS;
+</script></body></html>
