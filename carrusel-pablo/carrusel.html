@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Carrusel 5 claves</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#02040C;--blue:#2F6BFF;--blue2:#4D8DFF;--cyan:#5EC8FF;--white:#FFFFFF;--muted:rgba(255,255,255,.72)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#555;font-family:Poppins,sans-serif;color:#fff}
+.slide{width:1080px;height:1350px;position:relative;overflow:hidden;background:var(--bg)}
+.glow{position:absolute;inset:0;background:radial-gradient(620px 620px at 50% 58%,rgba(47,107,255,.35),rgba(47,107,255,.08) 55%,transparent 72%)}
+.ring{position:absolute;left:50%;top:58%;width:900px;height:900px;margin:-450px 0 0 -450px;border-radius:50%;border:2px solid rgba(77,141,255,.18)}
+.foot{position:absolute;left:64px;right:64px;bottom:50px;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:34px;z-index:5}
+.handle{display:flex;align-items:center;gap:16px}
+.handle .av{width:66px;height:66px;border-radius:50%;border:3px solid var(--blue);background:url(assets/personaje.png) no-repeat;background-size:420%;background-position:47.5% 46%}
+.sw{display:flex;align-items:center;gap:14px;font-weight:700}
+.sw svg{width:54px}
+h1{font-weight:900;line-height:.95;letter-spacing:-1px}
+.b{color:var(--blue2)}
+/* portada */
+.cover img.char{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 100%}
+.cover .shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,4,12,.95) 0%,rgba(2,4,12,.6) 22%,transparent 40%,transparent 82%,rgba(2,4,12,.85) 100%)}
+.cover .title{position:absolute;top:70px;left:0;right:0;text-align:center;z-index:3}
+.cover h1{font-size:200px}
+.cover .sub{font-weight:800;font-size:54px;line-height:1.12;margin-top:14px;text-transform:uppercase}
+/* consejos */
+.tip .big{position:absolute;right:-30px;top:120px;font-weight:900;font-size:620px;line-height:1;color:transparent;-webkit-text-stroke:3px rgba(77,141,255,.22);letter-spacing:-20px}
+.tip .wrap{position:absolute;left:72px;right:72px;top:150px;z-index:2}
+.badge{display:inline-flex;align-items:center;gap:14px;background:var(--blue);padding:12px 28px 12px 14px;border-radius:50px;font-weight:800;font-size:30px;letter-spacing:1px}
+.badge span{background:#fff;color:var(--bg);width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-weight:900;font-size:28px}
+.tip h1{font-size:94px;letter-spacing:-2px;margin-top:44px;text-transform:uppercase}
+.key{margin-top:56px;display:inline-block;border:3px solid var(--blue2);border-radius:28px;padding:22px 36px;background:rgba(47,107,255,.12)}
+.key b{display:block;font-weight:900;font-size:76px;color:var(--cyan);line-height:1}
+.key small{display:block;font-weight:600;font-size:28px;color:var(--muted);margin-top:8px;letter-spacing:1px;text-transform:uppercase}
+.tip p{margin-top:52px;font-weight:500;font-size:40px;line-height:1.45;color:var(--muted);max-width:900px}
+.tip p strong{color:#fff;font-weight:700}
+/* cierre */
+.cta img.char{position:absolute;left:0;right:0;bottom:-40px;width:100%;height:auto;opacity:.95}
+.cta .shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,4,12,1) 0%,rgba(2,4,12,.92) 38%,rgba(2,4,12,.25) 62%,rgba(2,4,12,.7) 100%)}
+.cta .title{position:absolute;top:96px;left:64px;right:64px;text-align:center;z-index:3}
+.cta h1{font-size:96px;text-transform:uppercase}
+.cta .dm{margin:44px auto 0;display:inline-block;background:var(--blue);border-radius:60px;padding:26px 54px;font-weight:800;font-size:44px;box-shadow:0 0 60px rgba(47,107,255,.6)}
+.cta .dm em{font-style:normal;color:#fff;background:var(--bg);border-radius:14px;padding:2px 18px;margin:0 6px}
+.cta .note{margin-top:28px;font-weight:500;font-size:34px;color:var(--muted)}
+</style></head><body>
+
+<!-- 1 · PORTADA -->
+<section class="slide cover">
+  <img class="char" src="assets/personaje.png">
+  <div class="shade"></div>
+  <div class="title">
+    <h1><span class="b">5</span> CLAVES</h1>
+    <div class="sub">que van a acelerar tus<br>resultados en el gimnasio</div>
+  </div>
+  <div class="foot"><span>@pablohentrenador</span><span class="sw">DESLIZA <svg viewBox="0 0 54 24"><path d="M2 12h46M38 3l10 9-10 9" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+</section>
+
+<template id="tip">
+<section class="slide tip">
+  <div class="glow"></div><div class="ring"></div>
+  <div class="big">{N}</div>
+  <div class="wrap">
+    <div class="badge"><span>{n}</span>CLAVE {n} DE 5</div>
+    <h1>{T}</h1>
+    <div class="key"><b>{K}</b><small>{KS}</small></div>
+    <p>{P}</p>
+  </div>
+  <div class="foot"><span class="handle"><i class="av"></i>@pablohentrenador</span><span class="sw">{n}/5 <svg viewBox="0 0 54 24"><path d="M2 12h46M38 3l10 9-10 9" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+</section>
+</template>
+<div id="tips"></div>
+
+<!-- 7 · CIERRE -->
+<section class="slide cta">
+  <img class="char" src="assets/personaje.png">
+  <div class="shade"></div>
+  <div class="title">
+    <h1>¿Cuál vas a<br><span class="b">aplicar hoy?</span></h1>
+    <div class="dm">Escríbeme <em>PLAN</em> por DM</div>
+    <div class="note">y te preparo un entrenamiento<br>hecho para ti 💪</div>
+  </div>
+  <div class="foot"><span>@pablohentrenador</span><span class="sw">GUARDA · COMPARTE</span></div>
+</section>
+
+<script>
+const TIPS = [
+  { T: 'Calienta con series<br><span class="b">de aproximación</span>', K: '2–3 series', KS: 'ligeras, subiendo el peso', P: 'Antes de tu primer ejercicio, haz series suaves con el mismo movimiento. <strong>Preparan músculos y articulaciones</strong> mucho mejor que 15 minutos de cinta.' },
+  { T: 'Descansa de verdad<br><span class="b">entre series</span>', K: '2–3 min', KS: 'en los ejercicios grandes', P: 'Sentadilla, press, remo... Si descansas poco, <strong>levantas menos peso y haces menos repeticiones</strong>. Y eso es progresar menos.' },
+  { T: 'Usa el recorrido<br><span class="b">completo</span>', K: 'Rango completo', KS: 'y bajada controlada', P: 'Las medias repeticiones dan medio resultado. <strong>Baja controlando y estira el músculo</strong>: ahí está gran parte del estímulo para crecer.' },
+  { T: 'Muévete<br><span class="b">fuera del gym</span>', K: '8.000–10.000', KS: 'pasos al día', P: 'Una hora de entreno no compensa 23 horas sentado. <strong>Caminar es clave para perder grasa</strong> y apenas interfiere con tu recuperación.' },
+  { T: 'La creatina<br><span class="b">funciona</span>', K: '3–5 g / día', KS: 'monohidrato, todos los días', P: 'Es el suplemento con <strong>más evidencia para ganar fuerza y músculo</strong>. Tómala también los días de descanso, a la hora que te venga bien.' },
+];
+const tpl = document.getElementById('tip').innerHTML;
+document.getElementById('tips').innerHTML = TIPS.map((t, i) => tpl.replaceAll('{N}', '0' + (i + 1)).replaceAll('{n}', i + 1).replace('{T}', t.T).replace('{K}', t.K).replace('{KS}', t.KS).replace('{P}', t.P)).join('');
+</script>
+</body></html>
