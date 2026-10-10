@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1100" width="1000" height="1100">
+  <!-- Avatar de Pablo · ilustración vectorial basada en su foto -->
+  <defs>
+    <linearGradient id="skin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F0B48C"/><stop offset="1" stop-color="#D99470"/></linearGradient>
+    <linearGradient id="armL" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#C98460"/><stop offset=".55" stop-color="#E8A882"/><stop offset="1" stop-color="#D99470"/></linearGradient>
+    <linearGradient id="shirt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2D6BFF"/><stop offset="1" stop-color="#1238B8"/></linearGradient>
+    <linearGradient id="hair" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4A2E1C"/><stop offset="1" stop-color="#2A190F"/></linearGradient>
+    <radialGradient id="rim" cx=".5" cy=".5" r=".5"><stop offset=".7" stop-color="#3EF2FF" stop-opacity="0"/><stop offset="1" stop-color="#3EF2FF" stop-opacity=".55"/></radialGradient>
+  </defs>
+  <g stroke="#0E1326" stroke-width="7" stroke-linejoin="round" stroke-linecap="round">
+
+    <!-- BRAZO IZQUIERDO (del espectador) -->
+    <g id="arm">
+      <!-- antebrazo -->
+      <path d="M150,640 C112,575 112,488 140,418 L222,412 C226,478 214,548 214,612 Z" fill="url(#armL)"/>
+      <path d="M150,600 C140,540 145,480 160,430" fill="none" stroke="#B87452" stroke-width="5" opacity=".7"/>
+      <!-- puño -->
+      <path d="M128,420 C118,380 130,338 160,326 L214,322 C238,328 246,360 240,396 C236,420 226,430 210,432 L150,434 C138,432 130,428 128,420 Z" fill="url(#skin)"/>
+      <path d="M150,352 L222,350 M148,378 L226,376 M152,402 L226,402" fill="none" stroke="#B87452" stroke-width="5"/>
+      <path d="M232,352 C252,360 254,392 236,404" fill="url(#skin)"/>
+      <!-- bíceps -->
+      <path d="M318,612 C300,540 238,500 186,512 C138,522 112,566 122,622 C134,672 190,690 250,690 C282,690 306,684 318,676 Z" fill="url(#armL)"/>
+      <path d="M160,560 C190,532 236,530 262,552" fill="none" stroke="#F6C9A6" stroke-width="9" opacity=".9"/>
+      <path d="M150,640 C190,660 240,664 290,656" fill="none" stroke="#B87452" stroke-width="5" opacity=".6"/>
+    </g>
+    <use href="#arm" transform="translate(1000,0) scale(-1,1)"/>
+
+    <!-- TORSO / CAMISETA -->
+    <path d="M292,594 C380,566 430,560 452,568 C470,600 530,600 548,568 C570,560 620,566 708,594 L752,650 C746,720 738,780 728,840 C718,930 712,1010 708,1110 L292,1110 C288,1010 282,930 272,840 C262,780 254,720 248,650 Z" fill="url(#shirt)"/>
+    <!-- mangas -->
+    <g id="slv"><path d="M356,588 C300,570 250,582 228,608 L222,694 C262,708 306,708 342,698 C350,660 356,620 356,588 Z" fill="url(#shirt)"/>
+      <path d="M226,672 C264,684 304,684 344,676" fill="none" stroke="#0B2A8A" stroke-width="6"/></g>
+    <use href="#slv" transform="translate(1000,0) scale(-1,1)"/>
+    <path d="M330,760 C400,800 460,800 500,770 C540,800 600,800 670,760" fill="none" stroke="#0B2A8A" stroke-width="6" opacity=".8"/>
+    <path d="M500,640 L500,770" fill="none" stroke="#0B2A8A" stroke-width="5" opacity=".6"/>
+    <path d="M300,880 C360,900 420,905 470,895 M530,895 C580,905 640,900 700,880" fill="none" stroke="#0B2A8A" stroke-width="5" opacity=".5"/>
+    <!-- logo PH -->
+    <g stroke="none"><rect x="452" y="810" width="96" height="58" rx="12" fill="#3EF2FF"/>
+      <text x="500" y="852" text-anchor="middle" font-family="Inter Display" font-weight="900" font-size="38" fill="#0E1326">PH</text></g>
+
+    <!-- CUELLO -->
+    <path d="M446,470 L444,580 C470,606 530,606 556,580 L554,470 Z" fill="#D58E69"/>
+    <path d="M452,560 C480,578 520,578 548,560" fill="none" stroke="#B87452" stroke-width="5"/>
+    <!-- trapecios -->
+    <path d="M446,540 C410,556 370,570 330,592 C380,580 420,574 452,568 Z M554,540 C590,556 630,570 670,592 C620,580 580,574 548,568 Z" fill="#E3A07B"/>
+    <!-- cadena -->
+    <path d="M432,566 C452,620 548,620 568,566" fill="none" stroke="#E6E9F2" stroke-width="6" stroke-dasharray="7 5"/>
+
+    <!-- OREJAS -->
+    <ellipse cx="383" cy="352" rx="20" ry="34" fill="#E3A07B"/>
+    <ellipse cx="617" cy="352" rx="20" ry="34" fill="#E3A07B"/>
+    <!-- CABEZA -->
+    <path d="M386,330 C386,232 438,192 500,192 C562,192 614,232 614,330 C614,402 598,452 560,486 C540,502 520,508 500,508 C480,508 460,502 440,486 C402,452 386,402 386,330 Z" fill="url(#skin)"/>
+    <!-- BARBA -->
+    <path d="M390,372 C392,438 420,486 462,504 C484,514 516,514 538,504 C580,486 608,438 610,372 C602,404 588,424 566,432 C548,418 452,418 434,432 C412,424 398,404 390,372 Z" fill="#4A2E1C" stroke-width="0" opacity=".92"/>
+    <path d="M452,414 C478,398 522,398 548,414 C528,420 512,418 500,416 C488,418 472,420 452,414 Z" fill="#3A2416" stroke-width="0"/>
+    <!-- BOCA (sonrisa abierta) -->
+    <path d="M448,428 C470,478 530,478 552,428 C530,438 470,438 448,428 Z" fill="#5C1A1E"/>
+    <path d="M456,432 C480,440 520,440 544,432 L538,446 C516,452 484,452 462,446 Z" fill="#FFFFFF" stroke-width="3"/>
+    <path d="M478,458 C492,466 508,466 522,458" fill="none" stroke="#E86A6A" stroke-width="8"/>
+    <!-- mejillas / líneas de sonrisa -->
+    <path d="M430,404 C426,420 432,436 442,444 M570,404 C574,420 568,436 558,444" fill="none" stroke="#B87452" stroke-width="5"/>
+    <!-- NARIZ -->
+    <path d="M502,336 C496,362 486,380 488,388 C496,396 508,396 516,388" fill="none" stroke="#B87452" stroke-width="6"/>
+    <!-- OJOS (sonrientes) -->
+    <path d="M424,334 C440,316 460,316 474,332" fill="none" stroke="#0E1326" stroke-width="8"/>
+    <path d="M526,332 C540,316 560,316 576,334" fill="none" stroke="#0E1326" stroke-width="8"/>
+    <path d="M428,346 C444,352 458,352 470,346 M530,346 C542,352 556,352 572,346" fill="none" stroke="#B87452" stroke-width="4"/>
+    <!-- CEJAS -->
+    <path d="M416,302 C436,284 458,282 480,294" fill="none" stroke="#2A190F" stroke-width="14"/>
+    <path d="M520,294 C542,282 564,284 584,302" fill="none" stroke="#2A190F" stroke-width="14"/>
+    <!-- PELO: degradado a los lados + volumen arriba -->
+    <path d="M388,336 C384,300 386,276 394,258 L404,262 C398,284 396,310 398,336 Z M612,336 C616,300 614,276 606,258 L596,262 C602,284 604,310 602,336 Z" fill="#5A3A26" stroke-width="0" opacity=".85"/>
+    <path d="M388,280 C380,232 404,190 446,174 C462,152 500,144 528,156 C566,148 606,170 616,208 C630,236 626,262 614,282 C606,262 590,250 572,244 C560,252 540,256 520,250 C500,244 476,246 456,252 C430,256 404,262 388,280 Z" fill="url(#hair)"/>
+    <path d="M450,200 C470,186 494,182 512,190 M520,176 C548,170 576,180 592,200 M430,226 C452,214 476,212 494,218" fill="none" stroke="#6B4630" stroke-width="5"/>
+  </g>
+</svg>
