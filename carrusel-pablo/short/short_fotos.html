@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Short 5 claves fotos</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="personaje.js"></script>
+<script src="poses.js"></script>
+<style>html,body{margin:0;background:#000}canvas{display:block}</style>
+</head><body><canvas id="c"></canvas>
+<script>
+// ============================================================
+//  @pablohentrenador · 5 CLAVES · YouTube Short 9:16 · 90 BPM
+// ============================================================
+const W = 1080, H = 1920, CX = W / 2;
+const BPM = +(new URLSearchParams(location.search).get('bpm') || 90), BEAT = 60 / BPM;
+const SEGS = [6, 7, 7, 7, 7, 7, 7];                       // portada · 5 claves · cierre (beats)
+const STARTS = []; { let a = 0; for (const b of SEGS) { STARTS.push(a * BEAT); a += b; } STARTS.push(a * BEAT); }
+const DUR = STARTS[STARTS.length - 1];
+const BG = '#02040C', BLUE = '#2F6BFF', BLUE2 = '#4D8DFF', CYAN = '#5EC8FF', MUTED = 'rgba(255,255,255,0.72)';
+
+const cv = document.getElementById('c'); cv.width = W; cv.height = H;
+const out = cv.getContext('2d');
+const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
+const buf = mk(), ctx = buf.getContext('2d'), tA = mk(), tAc = tA.getContext('2d'), tB = mk(), tBc = tB.getContext('2d');
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutExpo = x => x >= 1 ? 1 : 1 - Math.pow(2, -10 * x);
+const eInOutCubic = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const eOutBack = x => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const P = (s, w = 900) => `${w} ${s}px Poppins`;
+function T(str, x, y, size, color, o = {}) {
+  const { weight = 900, align = 'center', alpha = 1, stroke = 0, ls = 0 } = o;
+  ctx.save(); ctx.font = P(size, weight); ctx.textAlign = align; ctx.letterSpacing = ls + 'px'; ctx.globalAlpha *= alpha;
+  if (stroke) { ctx.lineWidth = stroke; ctx.strokeStyle = color; ctx.strokeText(str, x, y); } else { ctx.fillStyle = color; ctx.fillText(str, x, y); }
+  ctx.restore();
+}
+function mw(str, size, weight = 900) { ctx.save(); ctx.font = P(size, weight); ctx.letterSpacing = '0px'; const w = ctx.measureText(str).width; ctx.restore(); return w; }
+function words(str, x, y, size, color, lt, t0, o = {}) {
+  const { stagger = 0.05, dur = 0.45, align = 'left', weight = 900 } = o;
+  const parts = str.split(' '), sp = mw(' ', size, weight), ws = parts.map(p => mw(p, size, weight));
+  const total = ws.reduce((a, b) => a + b, 0) + sp * (parts.length - 1);
+  let xx = align === 'center' ? x - total / 2 : x;
+  ctx.save(); ctx.beginPath(); ctx.rect(0, y - size * 1.0, W, size * 1.3); ctx.clip();
+  parts.forEach((p, i) => { const k = eOutExpo(seg(lt, t0 + i * stagger, t0 + i * stagger + dur)); if (k > 0) T(p, xx, y + (1 - k) * size * 1.2, size, color, { align: 'left', weight }); xx += ws[i] + sp; });
+  ctx.restore();
+}
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function circ(x, y, r) { ctx.beginPath(); ctx.arc(x, y, Math.max(0, r), 0, Math.PI * 2); }
+// párrafo con partes destacadas: [[texto, destacado?], ...]
+function rich(parts, x, y, maxW, size, lh, lt, t0) {
+  const toks = []; parts.forEach(([s, b]) => s.split(' ').filter(Boolean).forEach(w => toks.push([w, b])));
+  const lines = [[]]; let lw = 0;
+  toks.forEach(tk => { const w = mw(tk[0] + ' ', size, tk[1] ? 700 : 500); if (lw + w > maxW && lines[lines.length - 1].length) { lines.push([]); lw = 0; } lines[lines.length - 1].push(tk); lw += w; });
+  lines.forEach((ln, i) => {
+    const k = eOutExpo(seg(lt, t0 + i * 0.12, t0 + i * 0.12 + 0.5)); if (k <= 0) return;
+    let xx = x; ctx.save(); ctx.globalAlpha = k; ctx.translate(0, (1 - k) * 30);
+    ln.forEach(([w, b]) => { T(w, xx, y + i * lh, size, b ? '#fff' : MUTED, { weight: b ? 700 : 500, align: 'left' }); xx += mw(w + ' ', size, b ? 700 : 500); });
+    ctx.restore();
+  });
+}
+let IMG; const CH = {};
+
+// ---------- fondo común ----------
+function background(t, glowY = 0.62, strength = 1) {
+  ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+  const pulse = beatEnv(t);
+  const g = ctx.createRadialGradient(CX, H * glowY, 0, CX, H * glowY, 760);
+  g.addColorStop(0, `rgba(47,107,255,${(0.34 + 0.12 * pulse) * strength})`); g.addColorStop(0.55, `rgba(47,107,255,${0.08 * strength})`); g.addColorStop(1, 'rgba(47,107,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = `rgba(77,141,255,${0.16 + 0.1 * pulse})`; ctx.lineWidth = 2; circ(CX, H * glowY, 470 + pulse * 14); ctx.stroke();
+  // partículas
+  const r = rng(12);
+  for (let i = 0; i < 60; i++) { const x = r() * W, sp = 20 + r() * 50, y = (r() * H - t * sp + H * 4) % H, s = 1 + r() * 2.5; ctx.fillStyle = `rgba(94,200,255,${0.15 + r() * 0.35})`; circ(x, y, s); ctx.fill(); }
+}
+function beatEnv(t) { return Math.exp(-((t % BEAT) / BEAT) * 5); }
+function handle(y, k = 1) {
+  ctx.save(); ctx.globalAlpha = k;
+  ctx.save(); circ(102, y, 36); ctx.clip(); ctx.drawImage(IMG, 380, 545, 300, 300, 66, y - 36, 72, 72); ctx.restore();
+  ctx.strokeStyle = BLUE; ctx.lineWidth = 4; circ(102, y, 36); ctx.stroke();
+  T('@pablohentrenador', 156, y + 12, 34, '#fff', { weight: 600, align: 'left' });
+  ctx.restore();
+}
+function character(x, y, w, alpha = 1) {
+  const h = Math.round(w * IMG.height / IMG.width);
+  if (!CH[w]) {   // versión con bordes difuminados (se calcula una vez por tamaño)
+    const c = document.createElement('canvas'); c.width = w; c.height = h; const g2 = c.getContext('2d');
+    g2.drawImage(IMG, 0, 0, w, h); g2.globalCompositeOperation = 'destination-in';
+    const gv = g2.createLinearGradient(0, 0, 0, h); gv.addColorStop(0, 'rgba(0,0,0,0)'); gv.addColorStop(0.32, 'rgba(0,0,0,1)'); gv.addColorStop(0.88, 'rgba(0,0,0,1)'); gv.addColorStop(1, 'rgba(0,0,0,0)');
+    g2.fillStyle = gv; g2.fillRect(0, 0, w, h);
+    const gh = g2.createLinearGradient(0, 0, w, 0); gh.addColorStop(0, 'rgba(0,0,0,0)'); gh.addColorStop(0.12, 'rgba(0,0,0,1)'); gh.addColorStop(0.88, 'rgba(0,0,0,1)'); gh.addColorStop(1, 'rgba(0,0,0,0)');
+    g2.fillStyle = gh; g2.fillRect(0, 0, w, h); CH[w] = c;
+  }
+  ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(CH[w], x - w / 2, y); ctx.restore();
+}
+
+// ---------- escenas ----------
+function sCover(lt) {
+  background(lt + STARTS[0], 0.66);
+  const kc = eOutExpo(seg(lt, 0.1, 1.2)), z = lerp(1.15, 1, kc) + lt * 0.01;
+  ctx.save(); ctx.translate(CX, 1920); ctx.scale(z, z); ctx.translate(-CX, -1920);
+  character(CX, 520 + (1 - kc) * 200, 1180, kc); ctx.restore();
+  // 5 CLAVES
+  const k5 = eOutBack(seg(lt, 0.35, 0.75));
+  const w5 = mw('5', 196), wc = mw(' CLAVES', 196), x0 = CX - (w5 + wc) / 2;
+  if (k5 > 0) { ctx.save(); ctx.translate(x0 + w5 / 2, 330); ctx.scale(lerp(3, 1, k5), lerp(3, 1, k5)); ctx.globalAlpha = Math.min(1, k5 * 2); T('5', 0, 0, 196, BLUE2); ctx.restore(); }
+  words('CLAVES', x0 + w5 + mw(' ', 196), 330, 196, '#fff', lt, 0.6, { dur: 0.5 });
+  words('QUE VAN A ACELERAR TUS', CX, 430, 58, '#fff', lt, 1.0, { align: 'center', weight: 800 });
+  words('RESULTADOS EN EL GIMNASIO', CX, 500, 58, '#fff', lt, 1.15, { align: 'center', weight: 800 });
+  // insignia "mira hasta el final"
+  const kb = eOutBack(seg(lt, 2.0, 2.4));
+  if (kb > 0) { ctx.save(); ctx.translate(CX, 590); ctx.scale(kb, kb); rr(-250, -36, 500, 64, 32); ctx.fillStyle = BLUE; ctx.fill(); T('LA 5 ES LA MÁS IGNORADA', 0, 10, 28, '#fff', { weight: 800 }); ctx.restore(); }
+  handle(700, seg(lt, 1.6, 2.0));
+}
+const TIPS = [
+  { t: ['CALIENTA CON SERIES', 'DE APROXIMACIÓN'], k: '2–3 series', ks: 'LIGERAS, SUBIENDO EL PESO', p: [['Además de calentar,'], ['te van a ayudar a mejorar mucho tu rendimiento:', 1], ['llegas a tus series fuertes con el movimiento afinado y más fuerza.']] },
+  { t: ['DESCANSA DE VERDAD', 'ENTRE SERIES'], k: '2–3 min', ks: 'EN LOS EJERCICIOS GRANDES', p: [['Sentadilla, press, remo... Si descansas poco,'], ['levantas menos peso y haces menos repeticiones.', 1], ['Y eso es progresar menos.']] },
+  { t: ['USA EL RECORRIDO', 'COMPLETO'], k: 'Rango completo', ks: 'Y BAJADA CONTROLADA', p: [['Las medias repeticiones dan medio resultado.'], ['Baja controlando y estira el músculo:', 1], ['ahí está gran parte del estímulo para crecer.']] },
+  { t: ['MUÉVETE', 'FUERA DEL GYM'], k: '8.000–10.000', ks: 'PASOS AL DÍA', p: [['Una hora de entreno no compensa 23 horas sentado.'], ['Caminar es clave para perder grasa', 1], ['y apenas interfiere con tu recuperación.']] },
+  { t: ['LA CREATINA', 'FUNCIONA'], k: '3–5 g / día', ks: 'MONOHIDRATO, TODOS LOS DÍAS', p: [['Es el suplemento con'], ['más evidencia para ganar fuerza y músculo.', 1], ['Tómala también los días de descanso.']] },
+];
+const POSE = ['mancuernas', 'selfie', 'sentadilla', 'mochila', 'press_banca'];
+const POSY = [0.2, 0.0, 0.45, 0.1, 0.15];
+const PIM = {};
+// foto con efecto Ken Burns (zoom lento + paneo) y fundido inferior
+function photo(name, y0, h, lt, focus = 0.2, dir = 1) {
+  const img = PIM[name], s0 = Math.max(W / img.width, h / img.height);
+  const z = s0 * (1.14 - 0.1 * Math.min(1, lt / 4.5)) * (1 + 0.012 * beatEnv(lt + 99));
+  const dw = img.width * z, dh = img.height * z;
+  const x = CX - dw / 2 + dir * 22 * Math.min(1, lt / 4.5), y = y0 - (dh - h) * focus;
+  ctx.save(); ctx.beginPath(); ctx.rect(0, y0, W, h); ctx.clip(); ctx.drawImage(img, x, y, dw, dh);
+  const g = ctx.createLinearGradient(0, y0, 0, y0 + h); g.addColorStop(0, 'rgba(2,4,12,0.55)'); g.addColorStop(0.18, 'rgba(2,4,12,0)'); g.addColorStop(0.62, 'rgba(2,4,12,0)'); g.addColorStop(1, 'rgba(2,4,12,1)');
+  ctx.fillStyle = g; ctx.fillRect(0, y0, W, h); ctx.restore();
+}
+function sTip(i, lt, t) {
+  background(t, 0.75, 0.6);
+  const tip = TIPS[i];
+  // la foto entra con un barrido de máscara de abajo arriba
+  const kr = eOutExpo(seg(lt, 0, 0.6));
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 1180 * (1 - kr), W, 1180); ctx.clip();
+  photo(POSE[i], 0, 1180, lt, POSY[i], i % 2 ? -1 : 1); ctx.restore();
+  // barras de progreso tipo stories
+  for (let k = 0; k < 5; k++) { ctx.fillStyle = 'rgba(255,255,255,0.25)'; rr(60 + k * 196, 60, 180, 8, 4); ctx.fill(); ctx.fillStyle = '#fff'; rr(60 + k * 196, 60, 180 * (k < i ? 1 : k > i ? 0 : seg(lt, 0, SEGS[i + 1] * BEAT)), 8, 4); ctx.fill(); }
+  handle(140, seg(lt, 0.1, 0.4));
+  // insignia
+  const kb = eOutBack(seg(lt, 0.2, 0.55));
+  if (kb > 0) { ctx.save(); ctx.translate(64, 260); ctx.scale(kb, kb); rr(0, -44, 380, 72, 36); ctx.fillStyle = BLUE; ctx.fill(); circ(38, -8, 26); ctx.fillStyle = '#fff'; ctx.fill(); T(String(i + 1), 38, 4, 32, BG); T(`CLAVE ${i + 1} DE 5`, 80, 4, 32, '#fff', { weight: 800, align: 'left' }); ctx.restore(); }
+  // dato clave sobre la foto + número
+  const kk = eOutBack(seg(lt, 0.7, 1.05));
+  if (kk > 0) {
+    const kw = Math.max(mw(tip.k, 76), mw(tip.ks, 26, 600)) + 70;
+    ctx.save(); ctx.translate(64, 1000); ctx.scale(kk, kk);
+    rr(0, 0, kw, 150, 28); ctx.fillStyle = 'rgba(2,4,12,0.85)'; ctx.fill(); ctx.strokeStyle = BLUE2; ctx.lineWidth = 4; ctx.stroke();
+    T(tip.k, 35, 86, 76, CYAN, { align: 'left' }); T(tip.ks, 35, 128, 26, MUTED, { weight: 600, align: 'left' });
+    ctx.restore();
+  }
+  const kn = eOutExpo(seg(lt, 0.5, 1.0));
+  T('0' + (i + 1), W - 50 + (1 - kn) * 200, 1150, 260, `rgba(77,141,255,${0.6 * kn})`, { align: 'right', stroke: 3 });
+  // título + texto
+  const ts = Math.min(92, 92 * 950 / Math.max(mw(tip.t[0], 92), mw(tip.t[1], 92)));
+  words(tip.t[0], 64, 1210 + ts, ts, '#fff', lt, 0.35);
+  words(tip.t[1], 64, 1210 + ts * 2.02, ts, BLUE2, lt, 0.5);
+  rich(tip.p, 64, 1210 + ts * 2 + 90, 950, 40, 58, lt, 1.1);
+}
+function sCTA(lt, t) {
+  background(t, 0.7, 0.6);
+  const kr = eOutExpo(seg(lt, 0, 0.7));
+  ctx.save(); ctx.globalAlpha = kr; photo('remo', 640, 1280, lt, 0.0); ctx.restore();
+  const g = ctx.createLinearGradient(0, 640, 0, 900); g.addColorStop(0, 'rgba(2,4,12,1)'); g.addColorStop(1, 'rgba(2,4,12,0)'); ctx.fillStyle = g; ctx.fillRect(0, 640, W, 260);
+  words('¿CUÁL VAS A', CX, 300, 110, '#fff', lt, 0.05, { align: 'center' });
+  words('APLICAR HOY?', CX, 415, 110, BLUE2, lt, 0.2, { align: 'center' });
+  const kd = eOutBack(seg(lt, 0.9, 1.3)), pulse = 1 + 0.04 * beatEnv(t);
+  if (kd > 0) {
+    ctx.save(); ctx.translate(CX, 540); ctx.scale(kd * pulse, kd * pulse);
+    ctx.shadowColor = 'rgba(47,107,255,0.8)'; ctx.shadowBlur = 50; rr(-400, -56, 800, 112, 56); ctx.fillStyle = BLUE; ctx.fill(); ctx.shadowColor = 'transparent';
+    const w1 = mw('Escríbeme', 46, 800), w2 = mw('PLAN', 46) + 40, w3 = mw('por DM', 46, 800), tw = w1 + w2 + w3 + 48; let xx = -tw / 2;
+    T('Escríbeme', xx, 18, 46, '#fff', { weight: 800, align: 'left' }); xx += w1 + 24;
+    rr(xx, -36, w2, 72, 16); ctx.fillStyle = BG; ctx.fill(); T('PLAN', xx + w2 / 2, 18, 46, '#fff'); xx += w2 + 24;
+    T('por DM', xx, 18, 46, '#fff', { weight: 800, align: 'left' });
+    ctx.restore();
+  }
+  T('y te preparo un entrenamiento hecho para ti', CX, 660, 36, MUTED, { weight: 600, alpha: seg(lt, 1.4, 1.8) });
+  handle(1500, seg(lt, 1.8, 2.2));
+}
+
+const SCENES = [lt => sCover(lt), ...TIPS.map((_, i) => (lt, t) => sTip(i, lt, t)), (lt, t) => sCTA(lt, t)];
+function drawScene(i, t) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; SCENES[i](t - STARTS[i], t); }
+const TW = 0.16;
+function render(t) {
+  let i = STARTS.findIndex((s, k) => t >= s && t < STARTS[k + 1]); if (i < 0) i = SCENES.length - 1;
+  let j = -1; for (let k = 1; k < SCENES.length; k++) if (Math.abs(t - STARTS[k]) < TW) j = k;
+  if (j > 0) {
+    drawScene(j - 1, t); tAc.drawImage(buf, 0, 0); drawScene(j, t); tBc.drawImage(buf, 0, 0);
+    const u = seg(t, STARTS[j] - TW, STARTS[j] + TW), s = eInOutCubic(u), blur = Math.sin(Math.PI * u) * 70;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+    [[tA, -s], [tB, 1 - s]].forEach(([img, o]) => { for (let g = 4; g >= 1; g--) { ctx.globalAlpha = 0.2; ctx.drawImage(img, 0, o * H - g * blur * 0.5); } ctx.globalAlpha = 1; ctx.drawImage(img, 0, o * H); });
+  } else drawScene(i, t);
+  const sa = STARTS[i], fl = 1 - seg(t, sa, sa + 0.12);
+  if (i > 0 && t >= sa && fl > 0) { ctx.fillStyle = `rgba(255,255,255,${fl * 0.25})`; ctx.fillRect(0, 0, W, H); }
+  const fo = seg(t, DUR - 0.4, DUR); if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${fo})`; ctx.fillRect(0, 0, W, H); }
+  const se = t >= sa ? Math.exp(-(t - sa) * 8) : 0, z = 1 + 0.012 * beatEnv(t) + 0.04 * se, sh = 10 * se;
+  out.setTransform(1, 0, 0, 1, 0, 0); out.fillStyle = '#000'; out.fillRect(0, 0, W, H);
+  out.save(); out.translate(CX + Math.sin(t * 90) * sh, H / 2 + Math.cos(t * 70) * sh); out.scale(z, z); out.translate(-CX, -H / 2); out.drawImage(buf, 0, 0); out.restore();
+  out.globalCompositeOperation = 'overlay'; out.globalAlpha = 0.05; out.drawImage(GRAIN[Math.floor(t * 30) % 4], 0, 0, W, H);
+  out.globalCompositeOperation = 'source-over'; out.globalAlpha = 1;
+}
+let GRAIN;
+window.ready = (async () => {
+  IMG = new Image(); IMG.src = window.PERSONAJE; await IMG.decode();
+  for (const [k, v] of Object.entries(window.POSES)) { const im = new Image(); im.src = v; await im.decode(); PIM[k] = im; }
+  await document.fonts.load('900 50px Poppins'); await document.fonts.load('500 50px Poppins'); await document.fonts.load('700 50px Poppins'); await document.fonts.load('800 50px Poppins'); await document.fonts.load('600 50px Poppins');
+  const r = rng(9); GRAIN = [];
+  for (let k = 0; k < 4; k++) { const c = document.createElement('canvas'); c.width = 540; c.height = 960; const g = c.getContext('2d'), im = g.createImageData(540, 960); for (let j = 0; j < im.data.length; j += 4) { const v = r() * 255; im.data[j] = im.data[j + 1] = im.data[j + 2] = v; im.data[j + 3] = 255; } g.putImageData(im, 0, 0); GRAIN.push(c); }
+  render(0); return true;
+})();
+window.frame = (t, q = 0.95) => { render(t); return cv.toDataURL('image/jpeg', q); };
+window.DUR = DUR;
+</script></body></html>
